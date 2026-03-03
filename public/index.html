@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Aria — Your Personal Stylist</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">🌙</button>
+
+  <div class="landing">
+    <div class="landing-logo">✨</div>
+    <h1>Aria</h1>
+    <p class="tagline">Your personal AI stylist who knows your taste, your vibe, and your wardrobe goals.</p>
+
+    <div class="landing-buttons">
+      <button class="btn-primary" onclick="window.location.href='login.html'">
+        Get Started
+      </button>
+      <button class="btn-secondary" onclick="goToChat()">
+        I already have an account
+      </button>
+    </div>
+
+    <div class="feature-pills">
+      <span class="pill">👗 Outfits</span>
+      <span class="pill">👟 Footwear</span>
+      <span class="pill">💍 Accessories</span>
+      <span class="pill">💇 Hairstyles</span>
+    </div>
+  </div>
+
+  <script>
+    const savedTheme = localStorage.getItem('aria_theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    document.getElementById('themeBtn').textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme');
+      const next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('aria_theme', next);
+      document.getElementById('themeBtn').textContent = next === 'dark' ? '☀️' : '🌙';
+    }
+
+    function goToChat() {
+      const token = localStorage.getItem('aria_token');
+      if (token) {
+        window.location.href = 'chat.html';
+      } else {
+        window.location.href = 'login.html';
+      }
+    }
+  </script>
+</body>
+</html>

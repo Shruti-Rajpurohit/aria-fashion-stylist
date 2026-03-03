@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Fashion AI - Let's Know You</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">🌙</button>
+  <div class="onboarding-container">
+    <div class="onboarding-header">
+      <h1>Let's set up your style profile</h1>
+      <p>Help Aria understand your taste so every suggestion feels made for you</p>
+    </div>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+    </div>
+
+    <form id="onboardingForm">
+
+      <div class="form-card">
+        <div class="form-card-title">About You</div>
+
+        <div class="form-group">
+          <label>Your Photo <span>(optional but recommended)</span></label>
+          <div class="photo-upload-area" id="photoUploadArea" onclick="document.getElementById('photoInput').click()">
+            <div class="photo-upload-icon">📸</div>
+            <div class="photo-upload-text">Tap to upload your photo</div>
+            <div class="photo-upload-hint">Helps Aria suggest colors and styles that suit you</div>
+          </div>
+          <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="handlePhotoSelect(event)" />
+          <div id="photoPreview" style="display:none; margin-top: 12px; text-align: center;">
+            <img id="previewImg" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 3px solid var(--accent-1);" />
+            <div id="photoStatus" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 6px;">Photo selected</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Your Name</label>
+          <input type="text" id="name" placeholder="What should Aria call you?" required />
+        </div>
+        <div class="form-group">
+          <label>Gender</label>
+          <select id="gender" required>
+            <option value="">Select your gender</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Non-binary">Non-binary</option>
+            <option value="Prefer not to say">Prefer not to say</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Age Group</label>
+          <select id="ageGroup" required>
+            <option value="">Select your age group</option>
+            <option value="Teen (13-17)">Teen (13-17)</option>
+            <option value="Young Adult (18-24)">Young Adult (18-24)</option>
+            <option value="Mid Twenties to Thirties (25-35)">Mid Twenties to Thirties (25-35)</option>
+            <option value="Thirties to Forties (36-45)">Thirties to Forties (36-45)</option>
+            <option value="Forties and above (46+)">Forties and above (46+)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-card">
+        <div class="form-card-title">Your Body</div>
+        <div class="form-group">
+          <label>Body Type</label>
+          <select id="bodyType" required>
+            <option value="">Select your body type</option>
+            <option value="Slim/Lean">Slim / Lean</option>
+            <option value="Athletic">Athletic</option>
+            <option value="Average">Average</option>
+            <option value="Curvy">Curvy</option>
+            <option value="Plus Size">Plus Size</option>
+            <option value="Petite">Petite</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Skin Tone</label>
+          <select id="skinTone" required>
+            <option value="">Select your skin tone</option>
+            <option value="Fair">Fair</option>
+            <option value="Light">Light</option>
+            <option value="Medium">Medium</option>
+            <option value="Olive">Olive</option>
+            <option value="Tan">Tan</option>
+            <option value="Deep/Dark">Deep / Dark</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Height</label>
+          <input type="text" id="height" placeholder="e.g. 5ft 6in or 168cm" required />
+        </div>
+      </div>
+
+      <div class="form-card">
+        <div class="form-card-title">Your Style</div>
+        <div class="form-group">
+          <label>Preferred Style</label>
+          <select id="preferredStyle" required>
+            <option value="">Select your vibe</option>
+            <option value="Casual">Casual</option>
+            <option value="Streetwear">Streetwear</option>
+            <option value="Formal">Formal</option>
+            <option value="Business Casual">Business Casual</option>
+            <option value="Bohemian">Bohemian</option>
+            <option value="Minimalist">Minimalist</option>
+            <option value="Trendy/Fashion Forward">Trendy / Fashion Forward</option>
+            <option value="Classic/Traditional">Classic / Traditional</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Favorite Colors</label>
+          <input type="text" id="favoriteColors" placeholder="e.g. Black, Navy, Earthy tones" required />
+        </div>
+        <div class="form-group">
+          <label>Colors You Want to Avoid</label>
+          <input type="text" id="colorsToAvoid" placeholder="e.g. Neon, Yellow" />
+        </div>
+      </div>
+
+      <div class="form-card">
+        <div class="form-card-title">Occasions & Budget</div>
+        <div class="form-group">
+          <label>Budget Range</label>
+          <select id="budget" required>
+            <option value="">Select your budget</option>
+            <option value="Budget-friendly">Budget Friendly</option>
+            <option value="Mid-range">Mid Range</option>
+            <option value="Premium">Premium</option>
+            <option value="Luxury">Luxury</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Occasions You Usually Dress For</label>
+          <input type="text" id="occasions" placeholder="e.g. Work, Dates, Casual hangouts" required />
+        </div>
+        <div class="form-group">
+          <label>Anything else Aria should know? <span>(optional)</span></label>
+          <textarea id="notes" placeholder="e.g. I prefer modest clothing, I love layering..."></textarea>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-primary">Meet Aria →</button>
+    </form>
+  </div>
+
+  <script>
+    const savedTheme = localStorage.getItem('aria_theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    document.getElementById('themeBtn').textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme');
+      const next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('aria_theme', next);
+      document.getElementById('themeBtn').textContent = next === 'dark' ? '☀️' : '🌙';
+    }
+
+    const token = localStorage.getItem('aria_token');
+    const userId = localStorage.getItem('aria_userId');
+
+    if (!token || !userId) {
+      window.location.href = 'login.html';
+    }
+
+    // Progress bar
+    const fields = document.querySelectorAll('input, select, textarea');
+    function updateProgress() {
+      const filled = [...fields].filter(f => f.value.trim() !== '').length;
+      const pct = Math.round((filled / fields.length) * 100);
+      document.getElementById('progressFill').style.width = pct + '%';
+    }
+    fields.forEach(f => f.addEventListener('change', updateProgress));
+    fields.forEach(f => f.addEventListener('input', updateProgress));
+
+    let selectedPhotoFile = null;
+
+    function handlePhotoSelect(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      selectedPhotoFile = file;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        document.getElementById('previewImg').src = e.target.result;
+        document.getElementById('photoPreview').style.display = 'block';
+        document.getElementById('photoUploadArea').style.borderColor = 'var(--accent-1)';
+        document.getElementById('photoStatus').textContent = '✓ Photo ready';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    document.getElementById('onboardingForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const submitBtn = document.querySelector('.btn-primary');
+
+      // Build profile object once
+      const profile = {
+        name: document.getElementById('name').value,
+        gender: document.getElementById('gender').value,
+        ageGroup: document.getElementById('ageGroup').value,
+        bodyType: document.getElementById('bodyType').value,
+        skinTone: document.getElementById('skinTone').value,
+        height: document.getElementById('height').value,
+        preferredStyle: document.getElementById('preferredStyle').value,
+        favoriteColors: document.getElementById('favoriteColors').value,
+        colorsToAvoid: document.getElementById('colorsToAvoid').value,
+        budget: document.getElementById('budget').value,
+        occasions: document.getElementById('occasions').value,
+        notes: document.getElementById('notes').value,
+        photoAnalysis: null,
+        avatar: null
+      };
+
+      try {
+        // Handle photo if selected
+        if (selectedPhotoFile) {
+          submitBtn.textContent = 'Analyzing your photo...';
+
+          // Save avatar thumbnail
+          await new Promise((resolve) => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            img.onload = () => {
+              canvas.width = 80;
+              canvas.height = 80;
+              ctx.drawImage(img, 0, 0, 80, 80);
+              const avatarData = canvas.toDataURL('image/jpeg', 0.7);
+              localStorage.setItem('aria_avatar', avatarData);
+              profile.avatar = avatarData;
+              resolve();
+            };
+            img.src = document.getElementById('previewImg').src;
+          });
+
+          // Analyze photo with vision — never blocks if it fails
+          try {
+            const formData = new FormData();
+            formData.append('photo', selectedPhotoFile);
+
+            const photoRes = await Promise.race([
+              fetch('http://localhost:3000/api/analyze-profile-photo', {
+                method: 'POST',
+                headers: { 'Authorization': token },
+                body: formData
+              }),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 35000))
+            ]);
+
+            const photoData = await photoRes.json();
+            if (photoData.success) {
+              profile.photoAnalysis = photoData.analysis;
+            }
+          } catch (err) {
+            console.error('Photo analysis failed, continuing anyway:', err.message);
+          }
+        }
+
+        submitBtn.textContent = 'Setting up your profile...';
+
+        const res = await fetch('http://localhost:3000/api/profile', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token
+          },
+          body: JSON.stringify({ userId, profile })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+          localStorage.setItem('aria_name', profile.name);
+          window.location.href = 'chat.html';
+        } else {
+          throw new Error(data.error || 'Failed to save profile');
+        }
+
+      } catch (err) {
+        console.error(err);
+        submitBtn.textContent = 'Meet Aria →';
+        alert('Something went wrong: ' + err.message);
+      }
+    });
+  </script>
+</body>
+</html>

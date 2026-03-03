@@ -1,0 +1,5 @@
+node_modules/
+.env
+users.json
+profiles.json
+histories.json

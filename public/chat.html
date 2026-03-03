@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Aria — Your Stylist</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="chat-container">
+    <div class="chat-sidebar" id="chatSidebar">
+      <div class="sidebar-avatar" id="sidebarAvatar">✨</div>
+      <div class="sidebar-name" id="sidebarName">Aria</div>
+      <div class="sidebar-tagline" id="sidebarTagline">Your personal stylist</div>
+
+      <div class="sidebar-divider"></div>
+
+      <div class="sidebar-menu-item" onclick="toggleTheme()">
+        <span id="sidebarThemeIcon">🌙</span>
+        <span id="sidebarThemeLabel">Dark Mode</span>
+      </div>
+      <div class="sidebar-menu-item" onclick="window.location.href='profile.html'">
+        👤 Update Profile
+      </div>
+      <div class="sidebar-menu-item" onclick="clearHistory()">
+        🗑️ Clear Chat
+      </div>
+
+      <div class="sidebar-spacer"></div>
+
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-menu-item danger" onclick="handleLogout()">
+        🚪 Logout
+      </div>
+    </div>
+    <div class="chat-header">
+      <div class="chat-header-avatar" id="headerAvatar">✨</div>
+   
+      <div class="chat-header-info">
+        <h2>Aria</h2>
+        <p id="subtitleText">Your personal stylist</p>
+      </div>
+
+      <button class="menu-btn" onclick="toggleMenu()" id="menuBtn">☰</button>
+    </div>
+
+<!-- Slide down menu -->
+    <div class="chat-menu" id="chatMenu">
+      <div class="chat-menu-item" onclick="toggleTheme()">
+        <span id="themeLabel">🌙 Dark Mode</span>
+      </div>
+      <div class="chat-menu-item" onclick="window.location.href='profile.html'">
+        👤 Update Profile
+      </div>
+      <div class="chat-menu-item" onclick="clearHistoryFromMenu()">
+        🗑️ Clear Chat
+      </div>
+      <div class="chat-menu-item danger" onclick="handleLogout()">
+        🚪 Logout
+      </div>
+    </div>
+
+    <div class="messages" id="messages">
+      <div class="welcome-card" id="welcomeMsg">
+        <div class="welcome-emoji">✨</div>
+        <p>Give me a second while I get your profile ready...</p>
+      </div>
+    </div>
+
+    <div class="suggestion-chips" id="suggestionChips">
+      <span class="chip" onclick="useChip(this)">Casual day out 🌤️</span>
+      <span class="chip" onclick="useChip(this)">Date night 🌙</span>
+      <span class="chip" onclick="useChip(this)">Work outfit 💼</span>
+      <span class="chip" onclick="useChip(this)">Weekend brunch ☕</span>
+    </div>
+
+    <div id="imagePreviewChip" class="image-preview-chip" style="display:none">
+      <img id="chipPreviewImg" />
+      <span id="chipFileName">image.jpg</span>
+      <button class="remove-image-btn" onclick="removeSelectedImage()">✕</button>
+    </div>
+
+    <div class="chat-input-area">
+      <button class="image-upload-btn" onclick="document.getElementById('chatImageInput').click()">📎</button>
+      <input type="file" id="chatImageInput" accept="image/*" style="display:none" onchange="handleChatImageSelect(event)" />
+      <textarea 
+        id="userInput" 
+        placeholder="Tell Aria what you need..." 
+        rows="1"
+      ></textarea>
+      <button class="send-btn" id="sendBtn">➤</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
