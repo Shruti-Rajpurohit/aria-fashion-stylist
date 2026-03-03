@@ -207,7 +207,7 @@
 
     window.addEventListener('load', async () => {
       try {
-        const res = await fetch(`http://localhost:3000/api/profile/${userId}`, {
+        const res = await fetch(`https://aria-fashion-stylist-production.up.railway.app/api/profile/${userId}`, {
           headers: { 'Authorization': token }
         });
         existingProfileData = await res.json();
@@ -304,7 +304,7 @@
             formData.append('photo', selectedPhotoFile);
 
             const photoRes = await Promise.race([
-              fetch('http://localhost:3000/api/analyze-profile-photo', {
+              fetch('https://aria-fashion-stylist-production.up.railway.app/api/analyze-profile-photo', {
                 method: 'POST',
                 headers: { 'Authorization': token },
                 body: formData
@@ -323,7 +323,7 @@
 
         submitBtn.textContent = 'Saving...';
 
-        const res = await fetch('http://localhost:3000/api/profile', {
+        const res = await fetch('https://aria-fashion-stylist-production.up.railway.app/api/profile', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
