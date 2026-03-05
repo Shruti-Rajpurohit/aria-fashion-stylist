@@ -4,30 +4,67 @@ const express = require('express');
 const { Mistral } = require('@mistralai/mistralai');
 const dotenv = require('dotenv');
 const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 
 dotenv.config();
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log('Connected to MongoDB'))
+  .catch(err => console.error('MongoDB connection error:', err));
+
+// Define schemas
+const userSchema = new mongoose.Schema({
+  userId: { type: String, required: true, unique: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  createdAt: { type: String }
+});
+
+const profileSchema = new mongoose.Schema({
+  userId: { type: String, required: true, unique: true },
+  name: String,
+  gender: String,
+  ageGroup: String,
+  bodyType: String,
+  skinTone: String,
+  height: String,
+  preferredStyle: String,
+  favoriteColors: String,
+  colorsToAvoid: String,
+  budget: String,
+  occasions: String,
+  notes: String,
+  photoAnalysis: String,
+  avatar: String
+});
+
+const historySchema = new mongoose.Schema({
+  userId: { type: String, required: true, unique: true },
+  history: { type: Array, default: [] }
+});
+
+// Define models
+const User = mongoose.model('User', userSchema);
+const Profile = mongoose.model('Profile', profileSchema);
+const History = mongoose.model('History', historySchema);
 
 const app = express();
 const client = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
 
-const PROFILES_FILE = 'profiles.json';
-const USERS_FILE = 'users.json';
-const HISTORIES_FILE = 'histories.json';
 const JWT_SECRET = process.env.JWT_SECRET;
 
 // Groq vision setup
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_VISION_MODEL = 'meta-llama/llama-4-maverick-17b-128e-instruct';
 
-// Multer setup - store in memory
+// Multer setup
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
@@ -52,7 +89,6 @@ async function analyzeImageWithVision(imageBuffer, mimeType, prompt) {
   }
 
   const base64Image = imageBuffer.toString('base64');
-
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30000);
 
@@ -72,9 +108,7 @@ async function analyzeImageWithVision(imageBuffer, mimeType, prompt) {
               { type: 'text', text: prompt },
               {
                 type: 'image_url',
-                image_url: {
-                  url: `data:${mimeType};base64,${base64Image}`
-                }
+                image_url: { url: `data:${mimeType};base64,${base64Image}` }
               }
             ]
           }
@@ -95,28 +129,6 @@ async function analyzeImageWithVision(imageBuffer, mimeType, prompt) {
   }
 }
 
-function loadProfiles() {
-  if (!fs.existsSync(PROFILES_FILE)) fs.writeFileSync(PROFILES_FILE, JSON.stringify({}));
-  return JSON.parse(fs.readFileSync(PROFILES_FILE));
-}
-function saveProfiles(profiles) {
-  fs.writeFileSync(PROFILES_FILE, JSON.stringify(profiles, null, 2));
-}
-function loadUsers() {
-  if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, JSON.stringify({}));
-  return JSON.parse(fs.readFileSync(USERS_FILE));
-}
-function saveUsers(users) {
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-}
-function loadHistories() {
-  if (!fs.existsSync(HISTORIES_FILE)) fs.writeFileSync(HISTORIES_FILE, JSON.stringify({}));
-  return JSON.parse(fs.readFileSync(HISTORIES_FILE));
-}
-function saveHistories(histories) {
-  fs.writeFileSync(HISTORIES_FILE, JSON.stringify(histories, null, 2));
-}
-
 function verifyToken(req, res, next) {
   const token = req.headers['authorization'];
   if (!token) return res.status(401).json({ error: 'No token provided' });
@@ -129,26 +141,31 @@ function verifyToken(req, res, next) {
   }
 }
 
+// Auth routes
 app.post('/api/signup', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: 'All fields are required' });
   }
-  const users = loadUsers();
-  if (users[email]) {
-    return res.status(400).json({ error: 'Email already registered' });
+  try {
+    const existing = await User.findOne({ email });
+    if (existing) {
+      return res.status(400).json({ error: 'Email already registered' });
+    }
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const userId = 'user_' + Date.now();
+    await User.create({
+      userId,
+      email,
+      password: hashedPassword,
+      createdAt: new Date().toISOString()
+    });
+    const token = jwt.sign({ userId, email }, JWT_SECRET, { expiresIn: '30d' });
+    res.json({ success: true, token, userId, hasProfile: false });
+  } catch (err) {
+    console.error('Signup error:', err.message);
+    res.status(500).json({ error: 'Signup failed' });
   }
-  const hashedPassword = await bcrypt.hash(password, 10);
-  const userId = 'user_' + Date.now();
-  users[email] = {
-    userId,
-    email,
-    password: hashedPassword,
-    createdAt: new Date().toISOString()
-  };
-  saveUsers(users);
-  const token = jwt.sign({ userId, email }, JWT_SECRET, { expiresIn: '30d' });
-  res.json({ success: true, token, userId, hasProfile: false });
 });
 
 app.post('/api/login', async (req, res) => {
@@ -156,59 +173,87 @@ app.post('/api/login', async (req, res) => {
   if (!email || !password) {
     return res.status(400).json({ error: 'All fields are required' });
   }
-  const users = loadUsers();
-  const user = users[email];
-  if (!user) {
-    return res.status(400).json({ error: 'Invalid email or password' });
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid email or password' });
+    }
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+      return res.status(400).json({ error: 'Invalid email or password' });
+    }
+    const token = jwt.sign({ userId: user.userId, email }, JWT_SECRET, { expiresIn: '30d' });
+    const profile = await Profile.findOne({ userId: user.userId });
+    res.json({ success: true, token, userId: user.userId, hasProfile: !!profile });
+  } catch (err) {
+    console.error('Login error:', err.message);
+    res.status(500).json({ error: 'Login failed' });
   }
-  const validPassword = await bcrypt.compare(password, user.password);
-  if (!validPassword) {
-    return res.status(400).json({ error: 'Invalid email or password' });
-  }
-  const token = jwt.sign({ userId: user.userId, email }, JWT_SECRET, { expiresIn: '30d' });
-  const profiles = loadProfiles();
-  const hasProfile = !!profiles[user.userId];
-  res.json({ success: true, token, userId: user.userId, hasProfile });
 });
 
 app.get('/api/me', verifyToken, (req, res) => {
   res.json({ userId: req.userId });
 });
 
-app.post('/api/profile', verifyToken, (req, res) => {
+// Profile routes
+app.post('/api/profile', verifyToken, async (req, res) => {
   const { userId, profile } = req.body;
-  if (!userId || !profile) return res.status(400).json({ error: 'Missing userId or profile' });
-  const profiles = loadProfiles();
-  profiles[userId] = profile;
-  saveProfiles(profiles);
-  res.json({ success: true });
-});
-
-app.get('/api/profile/:userId', verifyToken, (req, res) => {
-  const profiles = loadProfiles();
-  const profile = profiles[req.params.userId];
-  if (!profile) return res.status(404).json({ error: 'Profile not found' });
-  res.json(profile);
-});
-
-app.post('/api/history', verifyToken, (req, res) => {
-  const { userId, history } = req.body;
-  const histories = loadHistories();
-  histories[userId] = history;
-  saveHistories(histories);
-  res.json({ success: true });
-});
-
-app.get('/api/history/:userId', verifyToken, (req, res) => {
-  const histories = loadHistories();
-  res.json({ history: histories[req.params.userId] || [] });
-});
-
-// Analyze profile photo
-app.post('/api/analyze-profile-photo', verifyToken, upload.single('photo'), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No image uploaded' });
+  if (!userId || !profile) {
+    return res.status(400).json({ error: 'Missing userId or profile' });
   }
+  try {
+    await Profile.findOneAndUpdate(
+      { userId },
+      { userId, ...profile },
+      { upsert: true, new: true }
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Save profile error:', err.message);
+    res.status(500).json({ error: 'Failed to save profile' });
+  }
+});
+
+app.get('/api/profile/:userId', verifyToken, async (req, res) => {
+  try {
+    const profile = await Profile.findOne({ userId: req.params.userId });
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+    res.json(profile);
+  } catch (err) {
+    console.error('Get profile error:', err.message);
+    res.status(500).json({ error: 'Failed to get profile' });
+  }
+});
+
+// History routes
+app.post('/api/history', verifyToken, async (req, res) => {
+  const { userId, history } = req.body;
+  try {
+    await History.findOneAndUpdate(
+      { userId },
+      { userId, history },
+      { upsert: true, new: true }
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Save history error:', err.message);
+    res.status(500).json({ error: 'Failed to save history' });
+  }
+});
+
+app.get('/api/history/:userId', verifyToken, async (req, res) => {
+  try {
+    const record = await History.findOne({ userId: req.params.userId });
+    res.json({ history: record ? record.history : [] });
+  } catch (err) {
+    console.error('Get history error:', err.message);
+    res.status(500).json({ error: 'Failed to get history' });
+  }
+});
+
+// Vision routes
+app.post('/api/analyze-profile-photo', verifyToken, upload.single('photo'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
   try {
     const prompt = `You are a fashion stylist assistant. Analyze this person's photo and describe:
 1. Apparent skin tone (e.g. fair, light, medium, olive, tan, deep/dark)
@@ -218,7 +263,6 @@ app.post('/api/analyze-profile-photo', verifyToken, upload.single('photo'), asyn
 5. Any other features relevant to fashion and styling
 
 Be concise and factual. This description will be used to give personalized fashion advice.`;
-
     const analysis = await analyzeImageWithVision(req.file.buffer, req.file.mimetype, prompt);
     res.json({ success: true, analysis });
   } catch (error) {
@@ -227,11 +271,8 @@ Be concise and factual. This description will be used to give personalized fashi
   }
 });
 
-// Analyze chat reference image
 app.post('/api/analyze-chat-image', verifyToken, upload.single('image'), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No image uploaded' });
-  }
+  if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
   try {
     const prompt = `You are a fashion stylist assistant. Analyze this image and describe in detail:
 1. If it shows clothing/outfit: describe the garments, style, fit, colors, patterns
@@ -242,7 +283,6 @@ app.post('/api/analyze-chat-image', verifyToken, upload.single('image'), async (
 6. Season/occasion it seems appropriate for
 
 Be specific and detailed. This will help a stylist suggest similar or complementary items.`;
-
     const analysis = await analyzeImageWithVision(req.file.buffer, req.file.mimetype, prompt);
     res.json({ success: true, analysis });
   } catch (error) {
@@ -251,13 +291,15 @@ Be specific and detailed. This will help a stylist suggest similar or complement
   }
 });
 
+// Chat route
 app.post('/api/chat', verifyToken, async (req, res) => {
   const { userId, message, history, imageAnalysis } = req.body;
-  const profiles = loadProfiles();
-  const profile = profiles[userId];
-  if (!profile) return res.status(404).json({ error: 'Profile not found' });
 
-  const systemPrompt = `You are Aria, a warm, expert personal fashion stylist and trusted style companion. You genuinely care about helping people discover their best style — not just suggesting outfits, but understanding their lifestyle, personality, and goals.
+  try {
+    const profile = await Profile.findOne({ userId });
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+    const systemPrompt = `You are Aria, a warm, expert personal fashion stylist and trusted style companion. You genuinely care about helping people discover their best style — not just suggesting outfits, but understanding their lifestyle, personality, and goals.
 
 Here is the profile of the person you are styling:
 - Name: ${profile.name}
@@ -291,7 +333,6 @@ RESPONSE STYLE:
 - End with something warm and encouraging but keep it natural, not cheesy
 - When suggesting specific outfit combinations, keep it realistic and within their budget`;
 
-  try {
     const validHistory = (history || []).filter(h => h.text && h.text.trim() !== '' && (h.role === 'user' || h.role === 'model'));
     const messages = [
       { role: 'system', content: systemPrompt },
@@ -309,14 +350,14 @@ RESPONSE STYLE:
 
     const result = await client.chat.complete({
       model: 'mistral-small-latest',
-      messages: messages
+      messages
     });
 
     const response = result.choices[0].message.content;
     res.json({ response });
 
   } catch (error) {
-    console.error('ERROR:', error.message);
+    console.error('Chat error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
