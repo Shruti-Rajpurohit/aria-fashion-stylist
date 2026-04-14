@@ -244,7 +244,7 @@
             formData.append('photo', selectedPhotoFile);
 
             const photoRes = await Promise.race([
-              fetch('https://aria-fashion-stylist-production.up.railway.app/api/analyze-profile-photo', {
+              fetch('https://aria-fashion-stylist.onrender.com/api/analyze-profile-photo', {
                 method: 'POST',
                 headers: { 'Authorization': token },
                 body: formData
@@ -263,7 +263,7 @@
 
         submitBtn.textContent = 'Setting up your profile...';
 
-        const res = await fetch('https://aria-fashion-stylist-production.up.railway.app/api/profile', {
+        const res = await fetch('https://aria-fashion-stylist.onrender.com/api/profile', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
