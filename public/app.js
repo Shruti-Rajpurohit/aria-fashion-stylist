@@ -40,10 +40,10 @@ window.addEventListener('load', async () => {
 
   try {
     const [historyRes, profileRes] = await Promise.all([
-      fetch(`https://aria-fashion-stylist-production.up.railway.app/api/history/${userId}`, {
+      fetch(`https://aria-fashion-stylist.onrender.com/api/history/${userId}`, {
         headers: { 'Authorization': token }
       }),
-      fetch(`https://aria-fashion-stylist-production.up.railway.app/api/profile/${userId}`, {
+      fetch(`https://aria-fashion-stylist.onrender.com/api/profile/${userId}`, {
         headers: { 'Authorization': token }
       })
     ]);
@@ -199,7 +199,7 @@ async function sendMessage() {
         const imgFormData = new FormData();
         imgFormData.append('image', selectedChatImage);
 
-        const imgRes = await fetch('https://aria-fashion-stylist-production.up.railway.app/api/analyze-chat-image', {
+        const imgRes = await fetch('https://aria-fashion-stylist.onrender.com/api/analyze-chat-image', {
           method: 'POST',
           headers: { 'Authorization': token },
           body: imgFormData
@@ -219,7 +219,7 @@ async function sendMessage() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);
 
-    const res = await fetch('https://aria-fashion-stylist-production.up.railway.app/api/chat', {
+    const res = await fetch('https://aria-fashion-stylist.onrender.com/api/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -243,7 +243,7 @@ async function sendMessage() {
       chatHistory.push({ role: 'user', text: message || '[shared an image]' });
       chatHistory.push({ role: 'model', text: data.response });
 
-      fetch('https://aria-fashion-stylist-production.up.railway.app/api/history', {
+      fetch('https://aria-fashion-stylist.onrender.com/api/history', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -290,7 +290,7 @@ function clearHistory() {
     document.getElementById('messages').innerHTML = '';
     addMessage(`Hey ${userName}! 👋 Fresh start! What would you like to style today? ✨`, 'aria');
 
-    fetch('https://aria-fashion-stylist-production.up.railway.app/api/history', {
+    fetch('https://aria-fashion-stylist.onrender.com/api/history', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
