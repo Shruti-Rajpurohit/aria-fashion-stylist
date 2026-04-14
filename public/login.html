@@ -98,7 +98,7 @@
         return showError('loginError', 'Please fill in all fields');
       }
       try {
-        const res = await fetch('https://aria-fashion-stylist-production.up.railway.app/api/login', {
+        const res = await fetch('https://aria-fashion-stylist.onrender.com/api/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password })
@@ -134,7 +134,7 @@
         return showError('signupError', 'Password must be at least 6 characters');
       }
       try {
-        const res = await fetch('https://aria-fashion-stylist-production.up.railway.app/api/signup', {
+        const res = await fetch('https://aria-fashion-stylist.onrender.com/api/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password })
