@@ -129,7 +129,7 @@ async function analyzeImageWithVision(imageBuffer, mimeType, prompt) {
   }
 }
 
-async function chatWithGroq(systemPrompt, messages) {
+async function chatWithGroq(messages) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30000);
 
@@ -375,13 +375,7 @@ RESPONSE STYLE:
       }
     ];
 
-    const result = await client.chat.complete({
-      model: 'mistral-small-latest',
-      messages
-    });
-
-    const response = result.choices[0].message.content;
-    res.json({ response });
+    const response = await chatWithGroq(messages);
 
   } catch (error) {
     console.error('Chat error:', error.message);
