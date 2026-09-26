@@ -142,7 +142,7 @@ async function chatWithGroq(messages) {
       },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'system', content: systemPrompt }, ...messages]
+        messages
       }),
       signal: controller.signal
     });
@@ -376,6 +376,7 @@ RESPONSE STYLE:
     ];
 
     const response = await chatWithGroq(messages);
+    res.json({ response });
 
   } catch (error) {
     console.error('Chat error:', error.message);
