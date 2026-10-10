@@ -22,6 +22,11 @@ const userSchema = new mongoose.Schema({
   createdAt: { type: String }
 });
 
+function truncate(text, maxChars = 500) {
+  if (!text) return text;
+  return text.length > maxChars ? text.slice(0, maxChars) + '...' : text;
+}
+
 const profileSchema = new mongoose.Schema({
   userId: { type: String, required: true, unique: true },
   name: String,
@@ -348,18 +353,19 @@ Match response to the ask:
 Style: adapt format to the ask, never the same template twice. Talk like a stylist friend, not a script. Match length to the question — a quick question gets a quick answer, only go long when an outfit breakdown or real explanation calls for it. No padding. Warm sign-off, not cheesy. Keep suggestions realistic and within budget.`;
 
     const validHistory = (history || [])
-     .filter(h => h.text && h.text.trim() !== '' && (h.role === 'user' || h.role === 'model'))
-     .slice(-10);
+      .filter(h => h.text && h.text.trim() !== '' && (h.role === 'user' || h.role === 'model'))
+      .slice(-8);
+    
     const messages = [
       { role: 'system', content: systemPrompt },
       ...validHistory.map(h => ({
         role: h.role === 'model' ? 'assistant' : 'user',
-        content: h.text
+        content: truncate(h.text)
       })),
       {
         role: 'user',
         content: imageAnalysis
-          ? `[User shared a reference image. Image analysis: ${imageAnalysis}]\n\n${message}`
+          ? `[User shared a reference image. Image analysis: ${truncate(imageAnalysis, 500)}]\n\n${message}`
           : message
       }
     ];
