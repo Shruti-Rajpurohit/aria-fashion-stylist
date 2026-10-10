@@ -65,7 +65,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 
 // Groq vision setup
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_VISION_MODEL = 'meta-llama/llama-4-maverick-17b-128e-instruct';
+const GROQ_VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
 
 // Multer setup
 const upload = multer({
