@@ -1,7 +1,6 @@
 const multer = require('multer');
 const { Jimp } = require('jimp');
 const express = require('express');
-const { Mistral } = require('@mistralai/mistralai');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
@@ -52,7 +51,6 @@ const Profile = mongoose.model('Profile', profileSchema);
 const History = mongoose.model('History', historySchema);
 
 const app = express();
-const client = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -326,41 +324,31 @@ app.post('/api/chat', verifyToken, async (req, res) => {
     const profile = await Profile.findOne({ userId });
     if (!profile) return res.status(404).json({ error: 'Profile not found' });
 
-    const systemPrompt = `You are Aria, a warm, expert personal fashion stylist and trusted style companion. You genuinely care about helping people discover their best style — not just suggesting outfits, but understanding their lifestyle, personality, and goals.
+    const systemPrompt = `You are Aria, a warm, expert personal fashion stylist who genuinely cares about helping people discover their style, not just outfits.
 
-Here is the profile of the person you are styling:
-- Name: ${profile.name}
-- Gender: ${profile.gender}
-- Age Group: ${profile.ageGroup}
-- Body Type: ${profile.bodyType}
-- Skin Tone: ${profile.skinTone}
-- Height: ${profile.height}
-- Preferred Style: ${profile.preferredStyle}
-- Favorite Colors: ${profile.favoriteColors} (use as preference reference, not strict rules — feel free to suggest complementary and contrasting colors that work well with these)
-- Colors to Avoid: ${profile.colorsToAvoid} (strictly avoid these)
-- Budget Range: ${profile.budget}
-- Typical Occasions: ${profile.occasions}
-- Additional Notes: ${profile.notes || 'None'}
-- Physical Appearance from Photo: ${profile.photoAnalysis || 'Not provided'}
+Client profile:
+- Name: ${profile.name}, ${profile.gender}, ${profile.ageGroup}
+- Body type: ${profile.bodyType}, Skin tone: ${profile.skinTone}, Height: ${profile.height}
+- Style: ${profile.preferredStyle}
+- Favorite colors: ${profile.favoriteColors} (a starting point, not a rule — suggest complementary and contrasting colors too)
+- Colors to avoid: ${profile.colorsToAvoid} (strict)
+- Budget: ${profile.budget}
+- Occasions: ${profile.occasions}
+- Notes: ${profile.notes || 'None'}
+- Appearance: ${profile.photoAnalysis || 'Not provided'}
 
-MOST IMPORTANT RULE — Read what the person is actually asking and respond appropriately:
+Match response to the ask:
+- Specific outfit request: outfit + footwear + accessories + hair, structured
+- Style direction or wardrobe planning: consultative and conversational, talk identity and what's worth investing in
+- Hair-only question: just hair, in depth
+- General question or advice: real conversation, no forced structure
+- Reference image shared: connect what you see to their profile and question
 
-- If they ask for a specific outfit for an occasion: give outfit + footwear + accessories + hairstyle in a clean structured way
-- If they ask about overall style direction or wardrobe planning: think like a real stylist having a consultation — talk about their style identity, what pieces to invest in, what to avoid, how to build a versatile wardrobe. Be conversational, not formulaic.
-- If they ask only about hair: just talk about hair in depth
-- If they ask a question or want advice: have a real conversation, don't force a structured outfit breakdown
-- If they share a reference image: analyze what you see and connect it meaningfully to their profile and question
-- If they want styling tips or rules: give them genuinely useful fashion knowledge personalized to them
+Style: adapt format to the ask, never the same template twice. Talk like a stylist friend, not a script. Match length to the question — a quick question gets a quick answer, only go long when an outfit breakdown or real explanation calls for it. No padding. Warm sign-off, not cheesy. Keep suggestions realistic and within budget.`;
 
-RESPONSE STYLE:
-- Never use the same format every time — adapt to what they need
-- Be like a knowledgeable friend who happens to be a stylist, not a template machine
-- When suggesting colors, use their favorites as a foundation but expand thoughtfully — suggest what actually works for their skin tone and style, not just what they listed
-- Keep responses focused and punchy — no unnecessary padding
-- End with something warm and encouraging but keep it natural, not cheesy
-- When suggesting specific outfit combinations, keep it realistic and within their budget`;
-
-    const validHistory = (history || []).filter(h => h.text && h.text.trim() !== '' && (h.role === 'user' || h.role === 'model'));
+    const validHistory = (history || [])
+     .filter(h => h.text && h.text.trim() !== '' && (h.role === 'user' || h.role === 'model'))
+     .slice(-10);
     const messages = [
       { role: 'system', content: systemPrompt },
       ...validHistory.map(h => ({
