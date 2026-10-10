@@ -98,20 +98,9 @@ async function analyzeImageWithVision(imageBuffer, mimeType, prompt) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: GROQ_VISION_MODEL,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: prompt },
-              {
-                type: 'image_url',
-                image_url: { url: `data:${mimeType};base64,${base64Image}` }
-              }
-            ]
-          }
-        ],
-        max_tokens: 500
+        model: 'openai/gpt-oss-120b',
+        messages,
+        max_tokens: 700
       }),
       signal: controller.signal
     });
