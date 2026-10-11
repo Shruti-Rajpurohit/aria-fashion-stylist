@@ -36,13 +36,22 @@ function addMessage(text, sender) {
 }
 
 function formatMessage(text) {
-  const safeText = escapeHtml(text || '');
-  return safeText
+  const lines = escapeHtml(text || '').split('\n');
+  let out = '', inList = false;
+  for (const line of lines) {
+    const m = /^- (.*)$/.exec(line);
+    if (m) {
+      if (!inList) { out += '<ul>'; inList = true; }
+      out += '<li>' + m[1] + '</li>';
+    } else {
+      if (inList) { out += '</ul>'; inList = false; }
+      out += line + '<br>';
+    }
+  }
+  if (inList) out += '</ul>';
+  return out.replace(/(<br>)+$/, '')
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/\n/g, '<br>')
-    .replace(/^- (.*?)(<br>|$)/gm, '<li>$1</li>')
-    .replace(/(<li>.*?<\/li>)+/gs, '<ul>$&</ul>');
+    .replace(/\*(.*?)\*/g, '<em>$1</em>');
 }
 
 window.addEventListener('load', async () => {
@@ -160,65 +169,74 @@ function removeSelectedImage() {
 
 async function sendMessage() {
   const input = document.getElementById('userInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const messagesEl = document.getElementById('messages');
   const message = input.value.trim();
-  const hasImage = !!selectedChatImage;
-  if (!message && !hasImage) return;
-
-  let imageAnalysis = null;
-
-  if (hasImage) {
-    try {
-      const imgFormData = new FormData();
-      imgFormData.append('image', selectedChatImage);
-
-      const imgRes = await fetch(API_BASE + '/api/analyze-chat-image', {
-        method: 'POST',
-        headers: { 'Authorization': token },
-        body: imgFormData
-      });
-      const imgData = await imgRes.json();
-      if (!imgRes.ok || imgData.error === 'IMAGE_READ_FAILED' || !imgData.success) {
-        addMessage("I couldn't read that image, please try again", 'aria');
-        return;
-      }
-      imageAnalysis = imgData.analysis;
-      input.value = '';
-      input.style.height = 'auto';
-      removeSelectedImage();
-    } catch (err) {
-      console.error('Image analysis failed:', err);
-      addMessage("I couldn't read that image, please try again", 'aria');
-      return;
-    }
-  } else {
-    input.value = '';
-    input.style.height = 'auto';
-  }
+  const imageFile = selectedChatImage;
+  if (!message && !imageFile) return;
 
   input.disabled = true;
-  document.getElementById('sendBtn').disabled = true;
+  sendBtn.disabled = true;
 
-  if (!hasImage) {
-    addMessage(message, 'user');
+  const bubble = document.createElement('div');
+  bubble.classList.add('message', 'user');
+  if (imageFile) {
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(imageFile);
+    img.style.cssText = 'max-width:100%; border-radius:10px; display:block; margin-bottom:6px;';
+    bubble.appendChild(img);
   }
+  if (message) {
+    const textDiv = document.createElement('div');
+    textDiv.innerHTML = formatMessage(message);
+    bubble.appendChild(textDiv);
+  }
+  messagesEl.appendChild(bubble);
 
   const typingDiv = document.createElement('div');
   typingDiv.classList.add('message', 'aria');
   typingDiv.id = 'typingIndicator';
   typingDiv.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div><div class="typing-text">Aria is styling you...</div>';
-  document.getElementById('messages').appendChild(typingDiv);
-  document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+  messagesEl.appendChild(typingDiv);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
 
   try {
+    let imageAnalysis = null;
+
+    if (imageFile) {
+      let imgData = null;
+      try {
+        const fd = new FormData();
+        fd.append('image', imageFile);
+        const imgRes = await fetch(API_BASE + '/api/analyze-chat-image', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: fd
+        });
+        const parsed = await imgRes.json();
+        if (imgRes.ok && parsed.success) imgData = parsed;
+      } catch (err) {
+        console.error('Image analysis failed:', err);
+      }
+      if (!imgData) {
+        bubble.remove();
+        typingDiv.remove();
+        addMessage("I couldn't read that image, please try again", 'aria');
+        return; // typed text and thumbnail stay so the user can retry
+      }
+      imageAnalysis = imgData.analysis;
+    }
+
+    input.value = '';
+    input.style.height = 'auto';
+    if (imageFile) removeSelectedImage();
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);
 
     const res = await fetch(API_BASE + '/api/chat', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': token
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': token },
       body: JSON.stringify({
         message: message || 'I shared a reference image above.',
         history: chatHistory,
@@ -229,7 +247,7 @@ async function sendMessage() {
 
     clearTimeout(timeoutId);
     const data = await res.json();
-    document.getElementById('typingIndicator')?.remove();
+    typingDiv.remove();
 
     if (data.response) {
       addMessage(data.response, 'aria');
@@ -238,17 +256,14 @@ async function sendMessage() {
 
       fetch(API_BASE + '/api/history', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': token
-        },
-        body: JSON.stringify({ userId, history: chatHistory })
+        headers: { 'Content-Type': 'application/json', 'Authorization': token },
+        body: JSON.stringify({ history: chatHistory })
       });
     } else {
-      addMessage('Something went wrong. Try again!', 'aria');
+      addMessage(data.error || 'Something went wrong. Try again!', 'aria');
     }
   } catch (err) {
-    document.getElementById('typingIndicator')?.remove();
+    typingDiv.remove();
     if (err.name === 'AbortError') {
       addMessage('Aria is taking too long. Please try again!', 'aria');
     } else {
@@ -257,7 +272,7 @@ async function sendMessage() {
     }
   } finally {
     input.disabled = false;
-    document.getElementById('sendBtn').disabled = false;
+    sendBtn.disabled = false;
     input.focus();
   }
 }

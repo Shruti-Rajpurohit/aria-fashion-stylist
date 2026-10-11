@@ -785,14 +785,12 @@ body {
 }
 
 /* ===== MESSAGE FORMATTING ===== */
-.message ul {
-  padding-left: 16px;
-  margin: 6px 0;
+.message ul { 
+  margin: 6px 0 0 18px; padding: 0; 
 }
 
-.message li {
-  margin-bottom: 5px;
-  line-height: 1.5;
+.message li { 
+  margin-bottom: 3px; 
 }
 
 .message strong {

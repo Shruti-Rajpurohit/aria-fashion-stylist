@@ -331,11 +331,13 @@ app.post('/api/profile', verifyToken, async (req, res) => {
     return res.status(400).json({ error: 'Missing profile' });
   }
   try {
-    await Profile.findOneAndUpdate(
-      { userId: req.userId },
-      { userId: req.userId, ...profile },
-      { upsert: true, new: true }
-    );
+    const allowed = ['name','gender','ageGroup','bodyType','skinTone','height','preferredStyle',
+      'favoriteColors','colorsToAvoid','budget','occasions','notes','photoAnalysis','avatar'];
+    const update = {};
+    for (const k of allowed) {
+      if (profile[k] !== undefined) update[k] = String(profile[k]).slice(0, k === 'avatar' ? 3000000 : 800);
+    }
+    await Profile.findOneAndUpdate({ userId: req.userId }, { $set: update }, { upsert: true, new: true });
     res.json({ success: true });
   } catch (err) {
     console.error('Save profile error:', err.message);
