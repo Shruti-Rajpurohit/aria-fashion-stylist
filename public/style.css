@@ -368,6 +368,63 @@ body {
   color: var(--text-primary);
 }
 
+.password-field {
+  position: relative;
+}
+
+.password-field input {
+  padding-right: 48px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.password-toggle:hover {
+  background: rgba(107, 143, 113, 0.08);
+}
+
+.text-link-row {
+  margin: -6px 0 16px;
+  text-align: right;
+}
+
+.text-link {
+  color: var(--accent-1);
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.text-link:hover {
+  text-decoration: underline;
+}
+
+.success-msg {
+  background: rgba(107, 143, 113, 0.08);
+  border: 1px solid rgba(107, 143, 113, 0.2);
+  color: var(--accent-1);
+  padding: 10px 15px;
+  border-radius: var(--radius-sm);
+  font-size: 0.825rem;
+  margin-bottom: 16px;
+  display: none;
+}
+
 /* ===== ONBOARDING ===== */
 .onboarding-container {
   max-width: 480px;

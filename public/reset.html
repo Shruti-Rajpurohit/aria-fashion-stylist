@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Aria - Reset Password</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn" aria-label="Toggle theme">🌙</button>
+
+  <div class="auth-container">
+    <div class="auth-header">
+      <div class="auth-logo">✨</div>
+      <h1>Choose a new password</h1>
+      <p>Pick a strong password for your account.</p>
+    </div>
+
+    <div class="auth-form active" id="resetForm">
+      <div class="error-msg" id="resetError"></div>
+      <div class="success-msg" id="resetSuccess" style="display:none;"></div>
+      <div class="form-group">
+        <label>New password</label>
+        <div class="password-field">
+          <input type="password" id="resetPassword" placeholder="Enter a new password" />
+          <button type="button" class="password-toggle" aria-label="Show password" data-target="resetPassword">👁️</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Confirm password</label>
+        <div class="password-field">
+          <input type="password" id="resetConfirm" placeholder="Confirm your password" />
+          <button type="button" class="password-toggle" aria-label="Show password" data-target="resetConfirm">👁️</button>
+        </div>
+      </div>
+      <button class="btn-primary" type="button" onclick="handleResetPassword()">Update password</button>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin;
+    const savedTheme = localStorage.getItem('aria_theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    document.getElementById('themeBtn').textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme');
+      const next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('aria_theme', next);
+      document.getElementById('themeBtn').textContent = next === 'dark' ? '☀️' : '🌙';
+    }
+    function bindPasswordToggle(button) {
+      const targetId = button.dataset.target;
+      const input = document.getElementById(targetId);
+      button.addEventListener('click', () => {
+        const show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        button.textContent = show ? '🙈' : '👁️';
+        button.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+      });
+    }
+    document.querySelectorAll('.password-toggle').forEach(bindPasswordToggle);
+    function showError(message) {
+      const el = document.getElementById('resetError');
+      el.textContent = message;
+      el.style.display = 'block';
+      document.getElementById('resetSuccess').style.display = 'none';
+    }
+    function showSuccess(message) {
+      const el = document.getElementById('resetSuccess');
+      el.textContent = message;
+      el.style.display = 'block';
+      document.getElementById('resetError').style.display = 'none';
+    }
+    async function handleResetPassword() {
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('token');
+      const password = document.getElementById('resetPassword').value;
+      const confirm = document.getElementById('resetConfirm').value;
+      if (!token) return showError('This reset link is invalid or expired');
+      if (!password || !confirm) return showError('Please fill in all fields');
+      if (password.length < 8) return showError('Password must be at least 8 characters');
+      if (password !== confirm) return showError('Passwords do not match');
+      try {
+        const res = await fetch(API_BASE + '/api/reset-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, password })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showSuccess('Password updated. Redirecting to login...');
+          setTimeout(() => { window.location.href = 'login.html'; }, 1500);
+        } else {
+          showError(data.error || 'Could not reset your password');
+        }
+      } catch (err) {
+        showError('Could not connect to server');
+      }
+    }
+  </script>
+</body>
+</html>

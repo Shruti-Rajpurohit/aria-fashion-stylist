@@ -1,3 +1,4 @@
+const API_BASE = window.location.origin;
 const token = localStorage.getItem('aria_token');
 const userId = localStorage.getItem('aria_userId');
 const userName = localStorage.getItem('aria_name');
@@ -9,6 +10,15 @@ if (!token || !userId) {
 let chatHistory = [];
 let selectedChatImage = null;
 let selectedChatImageName = '';
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 function updateWelcomeMessage(text) {
   const el = document.getElementById('welcomeMsg');
@@ -26,7 +36,8 @@ function addMessage(text, sender) {
 }
 
 function formatMessage(text) {
-  return text
+  const safeText = escapeHtml(text || '');
+  return safeText
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
     .replace(/\n/g, '<br>')
@@ -40,10 +51,10 @@ window.addEventListener('load', async () => {
 
   try {
     const [historyRes, profileRes] = await Promise.all([
-      fetch(`https://aria-fashion-stylist.onrender.com/api/history/${userId}`, {
+      fetch(API_BASE + '/api/history/' + userId, {
         headers: { 'Authorization': token }
       }),
-      fetch(`https://aria-fashion-stylist.onrender.com/api/profile/${userId}`, {
+      fetch(API_BASE + '/api/profile/' + userId, {
         headers: { 'Authorization': token }
       })
     ]);
@@ -61,45 +72,40 @@ window.addEventListener('load', async () => {
     }
 
     const displayName = profileData.name || userName || 'there';
-    // Set correct theme label
     const themeLabel = document.getElementById('themeLabel');
     if (themeLabel) {
       const currentTheme = localStorage.getItem('aria_theme') || 'light';
       themeLabel.textContent = currentTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
     }
 
-    // Show profile photo if available
-    // Load avatar from profile first, fallback to localStorage
     const avatarSource = profileData.avatar || localStorage.getItem('aria_avatar');
     if (avatarSource) {
       localStorage.setItem('aria_avatar', avatarSource);
       const headerAvatar = document.getElementById('headerAvatar');
       if (headerAvatar) {
-        headerAvatar.innerHTML = `<img src="${avatarSource}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;" />`;
+        headerAvatar.innerHTML = '<img src="' + avatarSource + '" style="width:100%; height:100%; border-radius:50%; object-fit:cover;" />';
       }
     }
-    
-    // Sync sidebar on desktop
+
     const sidebarAvatar = document.getElementById('sidebarAvatar');
     if (sidebarAvatar) {
       if (avatarSource) {
-        sidebarAvatar.innerHTML = `<img src="${avatarSource}" style="width:100%; height:100%; object-fit:cover;" />`;
+        sidebarAvatar.innerHTML = '<img src="' + avatarSource + '" style="width:100%; height:100%; object-fit:cover;" />';
       }
     }
     const sidebarName = document.getElementById('sidebarName');
     if (sidebarName) sidebarName.textContent = displayName;
 
     const sidebarTagline = document.getElementById('sidebarTagline');
-    if (sidebarTagline) sidebarTagline.textContent = `Hi ${displayName}, let's style you! 💫`;
+    if (sidebarTagline) sidebarTagline.textContent = 'Hi ' + displayName + ', let\'s style you! 💫';
 
-    // Sync sidebar theme label
     const sidebarThemeLabel = document.getElementById('sidebarThemeLabel');
     const sidebarThemeIcon = document.getElementById('sidebarThemeIcon');
     const currentTheme = localStorage.getItem('aria_theme') || 'light';
     if (sidebarThemeLabel) sidebarThemeLabel.textContent = currentTheme === 'dark' ? 'Light Mode' : 'Dark Mode';
     if (sidebarThemeIcon) sidebarThemeIcon.textContent = currentTheme === 'dark' ? '☀️' : '🌙';
 
-    document.getElementById('subtitleText').textContent = `Hi ${displayName}, let's style you! 💫`;
+    document.getElementById('subtitleText').textContent = 'Hi ' + displayName + ', let\'s style you! 💫';
 
     chatHistory = historyData.history || [];
 
@@ -116,14 +122,13 @@ window.addEventListener('load', async () => {
         if (welcomeEl) {
           const p = welcomeEl.querySelector('p');
           if (p) {
-            p.textContent = `Hey ${displayName}! 👋 I'm Aria, your personal stylist. Tell me what you need — an outfit for a special occasion, everyday look, date night, anything at all. I've already got your profile so my suggestions will be just for you! ✨`;
+            p.textContent = 'Hey ' + displayName + '! 👋 I\'m Aria, your personal stylist. Tell me what you need — an outfit for a special occasion, everyday look, date night, anything at all. I\'ve already got your profile so my suggestions will be just for you! ✨';
           }
         }
         document.getElementById('userInput').disabled = false;
         document.getElementById('sendBtn').disabled = false;
       }, 800);
     }
-
   } catch (err) {
     console.error('Could not load data', err);
     window.location.href = 'onboarding.html';
@@ -156,77 +161,65 @@ function removeSelectedImage() {
 async function sendMessage() {
   const input = document.getElementById('userInput');
   const message = input.value.trim();
-  if (!message && !selectedChatImage) return;
+  const hasImage = !!selectedChatImage;
+  if (!message && !hasImage) return;
 
-  input.value = '';
-  input.style.height = 'auto';
+  let imageAnalysis = null;
+
+  if (hasImage) {
+    try {
+      const imgFormData = new FormData();
+      imgFormData.append('image', selectedChatImage);
+
+      const imgRes = await fetch(API_BASE + '/api/analyze-chat-image', {
+        method: 'POST',
+        headers: { 'Authorization': token },
+        body: imgFormData
+      });
+      const imgData = await imgRes.json();
+      if (!imgRes.ok || imgData.error === 'IMAGE_READ_FAILED' || !imgData.success) {
+        addMessage("I couldn't read that image, please try again", 'aria');
+        return;
+      }
+      imageAnalysis = imgData.analysis;
+      input.value = '';
+      input.style.height = 'auto';
+      removeSelectedImage();
+    } catch (err) {
+      console.error('Image analysis failed:', err);
+      addMessage("I couldn't read that image, please try again", 'aria');
+      return;
+    }
+  } else {
+    input.value = '';
+    input.style.height = 'auto';
+  }
+
   input.disabled = true;
   document.getElementById('sendBtn').disabled = true;
 
-  // Show message in chat
-  if (selectedChatImage) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const imgMsg = document.createElement('div');
-      imgMsg.classList.add('message', 'user');
-      imgMsg.innerHTML = `<img src="${e.target.result}" style="max-width:100%; border-radius:10px; display:block; margin-bottom:6px;" />${message ? `<div>${formatMessage(message)}</div>` : ''}`;
-      document.getElementById('messages').appendChild(imgMsg);
-      document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
-    };
-    reader.readAsDataURL(selectedChatImage);
-  } else {
+  if (!hasImage) {
     addMessage(message, 'user');
   }
 
-  // Show typing indicator
   const typingDiv = document.createElement('div');
   typingDiv.classList.add('message', 'aria');
   typingDiv.id = 'typingIndicator';
-  typingDiv.innerHTML = `
-    <div class="typing-dots">
-      <span></span><span></span><span></span>
-    </div>
-    <div class="typing-text">Aria is styling you...</div>
-  `;
+  typingDiv.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div><div class="typing-text">Aria is styling you...</div>';
   document.getElementById('messages').appendChild(typingDiv);
   document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
 
   try {
-    let imageAnalysis = null;
-
-    if (selectedChatImage) {
-      try {
-        const imgFormData = new FormData();
-        imgFormData.append('image', selectedChatImage);
-
-        const imgRes = await fetch('https://aria-fashion-stylist.onrender.com/api/analyze-chat-image', {
-          method: 'POST',
-          headers: { 'Authorization': token },
-          body: imgFormData
-        });
-
-        const imgData = await imgRes.json();
-        if (imgData.success) {
-          imageAnalysis = imgData.analysis;
-        }
-      } catch (err) {
-        console.error('Image analysis failed:', err);
-      }
-
-      removeSelectedImage();
-    }
-
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);
 
-    const res = await fetch('https://aria-fashion-stylist.onrender.com/api/chat', {
+    const res = await fetch(API_BASE + '/api/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': token
       },
       body: JSON.stringify({
-        userId,
         message: message || 'I shared a reference image above.',
         history: chatHistory,
         imageAnalysis
@@ -243,7 +236,7 @@ async function sendMessage() {
       chatHistory.push({ role: 'user', text: message || '[shared an image]' });
       chatHistory.push({ role: 'model', text: data.response });
 
-      fetch('https://aria-fashion-stylist.onrender.com/api/history', {
+      fetch(API_BASE + '/api/history', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -254,7 +247,6 @@ async function sendMessage() {
     } else {
       addMessage('Something went wrong. Try again!', 'aria');
     }
-
   } catch (err) {
     document.getElementById('typingIndicator')?.remove();
     if (err.name === 'AbortError') {
@@ -271,7 +263,6 @@ async function sendMessage() {
 }
 
 document.getElementById('sendBtn').addEventListener('click', sendMessage);
-
 document.getElementById('userInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -288,9 +279,9 @@ function clearHistory() {
   if (confirm('Start a fresh conversation with Aria?')) {
     chatHistory = [];
     document.getElementById('messages').innerHTML = '';
-    addMessage(`Hey ${userName}! 👋 Fresh start! What would you like to style today? ✨`, 'aria');
+    addMessage('Hey ' + userName + '! 👋 Fresh start! What would you like to style today? ✨', 'aria');
 
-    fetch('https://aria-fashion-stylist.onrender.com/api/history', {
+    fetch(API_BASE + '/api/history', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -308,21 +299,18 @@ function handleLogout() {
   }
 }
 
-// Theme toggle
-const savedTheme = localStorage.getItem('aria_theme') || 'light';
-document.documentElement.setAttribute('data-theme', savedTheme);
+const savedThemeState = localStorage.getItem('aria_theme') || 'light';
+document.documentElement.setAttribute('data-theme', savedThemeState);
 const themeLabel = document.getElementById('themeLabel');
-if (themeLabel) themeLabel.textContent = savedTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
+if (themeLabel) themeLabel.textContent = savedThemeState === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
 
 function toggleTheme() {
   const current = document.documentElement.getAttribute('data-theme');
   const next = current === 'dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', next);
   localStorage.setItem('aria_theme', next);
-  // Mobile menu label
   const themeLabel = document.getElementById('themeLabel');
   if (themeLabel) themeLabel.textContent = next === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
-  // Sidebar label
   const sidebarThemeLabel = document.getElementById('sidebarThemeLabel');
   const sidebarThemeIcon = document.getElementById('sidebarThemeIcon');
   if (sidebarThemeLabel) sidebarThemeLabel.textContent = next === 'dark' ? 'Light Mode' : 'Dark Mode';
@@ -336,7 +324,6 @@ function toggleMenu() {
   btn.classList.toggle('active');
 }
 
-// Close menu when clicking outside
 document.addEventListener('click', (e) => {
   const menu = document.getElementById('chatMenu');
   const btn = document.getElementById('menuBtn');

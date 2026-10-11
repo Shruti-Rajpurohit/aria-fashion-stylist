@@ -1,2 +1,4 @@
-Here's the website link, you can access and level up your fashion and style game with Aria:
-https://aria-fashion-stylist.onrender.com
+Run the app locally to access Aria and level up your fashion and style game:
+
+npm install
+npm start

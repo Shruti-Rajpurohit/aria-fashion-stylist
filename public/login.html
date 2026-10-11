@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">🌙</button>
+  <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn" aria-label="Toggle theme">🌙</button>
 
   <div class="auth-container">
     <div class="auth-header">
@@ -17,11 +17,10 @@
     </div>
 
     <div class="auth-tabs">
-      <button class="auth-tab active" onclick="switchTab('login')">Login</button>
-      <button class="auth-tab" onclick="switchTab('signup')">Sign Up</button>
+      <button class="auth-tab active" type="button" onclick="switchTab('login')">Login</button>
+      <button class="auth-tab" type="button" onclick="switchTab('signup')">Sign Up</button>
     </div>
 
-    <!-- Login Form -->
     <div class="auth-form active" id="loginForm">
       <div class="error-msg" id="loginError"></div>
       <div class="form-group">
@@ -30,12 +29,17 @@
       </div>
       <div class="form-group">
         <label>Password</label>
-        <input type="password" id="loginPassword" placeholder="Enter your password" />
+        <div class="password-field">
+          <input type="password" id="loginPassword" placeholder="Enter your password" />
+          <button type="button" class="password-toggle" aria-label="Show password" data-target="loginPassword">👁️</button>
+        </div>
       </div>
-      <button class="btn-primary" onclick="handleLogin()">Login →</button>
+      <div class="text-link-row">
+        <a href="forgot.html" class="text-link">Forgot password?</a>
+      </div>
+      <button class="btn-primary" type="button" onclick="handleLogin()">Login →</button>
     </div>
 
-    <!-- Signup Form -->
     <div class="auth-form" id="signupForm">
       <div class="error-msg" id="signupError"></div>
       <div class="form-group">
@@ -44,18 +48,24 @@
       </div>
       <div class="form-group">
         <label>Password</label>
-        <input type="password" id="signupPassword" placeholder="Choose a password" />
+        <div class="password-field">
+          <input type="password" id="signupPassword" placeholder="Choose a password" />
+          <button type="button" class="password-toggle" aria-label="Show password" data-target="signupPassword">👁️</button>
+        </div>
       </div>
       <div class="form-group">
         <label>Confirm Password</label>
-        <input type="password" id="signupConfirm" placeholder="Confirm your password" />
+        <div class="password-field">
+          <input type="password" id="signupConfirm" placeholder="Confirm your password" />
+          <button type="button" class="password-toggle" aria-label="Show password" data-target="signupConfirm">👁️</button>
+        </div>
       </div>
-      <button class="btn-primary" onclick="handleSignup()">Create Account →</button>
+      <button class="btn-primary" type="button" onclick="handleSignup()">Create Account →</button>
     </div>
   </div>
 
   <script>
-    // Theme - runs first
+    const API_BASE = window.location.origin;
     const savedTheme = localStorage.getItem('aria_theme') || 'light';
     document.documentElement.setAttribute('data-theme', savedTheme);
     document.getElementById('themeBtn').textContent = savedTheme === 'dark' ? '☀️' : '🌙';
@@ -68,7 +78,20 @@
       document.getElementById('themeBtn').textContent = next === 'dark' ? '☀️' : '🌙';
     }
 
-    // Redirect if already logged in
+    function bindPasswordToggle(button) {
+      const targetId = button.dataset.target;
+      const input = document.getElementById(targetId);
+      if (!input || !button) return;
+      button.addEventListener('click', () => {
+        const show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        button.textContent = show ? '🙈' : '👁️';
+        button.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+      });
+    }
+
+    document.querySelectorAll('.password-toggle').forEach(bindPasswordToggle);
+
     const token = localStorage.getItem('aria_token');
     if (token) window.location.href = 'chat.html';
 
@@ -92,13 +115,13 @@
     }
 
     async function handleLogin() {
-      const email = document.getElementById('loginEmail').value.trim();
+      const email = document.getElementById('loginEmail').value.trim().toLowerCase();
       const password = document.getElementById('loginPassword').value;
       if (!email || !password) {
         return showError('loginError', 'Please fill in all fields');
       }
       try {
-        const res = await fetch('https://aria-fashion-stylist.onrender.com/api/login', {
+        const res = await fetch(API_BASE + '/api/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password })
@@ -121,7 +144,7 @@
     }
 
     async function handleSignup() {
-      const email = document.getElementById('signupEmail').value.trim();
+      const email = document.getElementById('signupEmail').value.trim().toLowerCase();
       const password = document.getElementById('signupPassword').value;
       const confirm = document.getElementById('signupConfirm').value;
       if (!email || !password || !confirm) {
@@ -130,11 +153,11 @@
       if (password !== confirm) {
         return showError('signupError', 'Passwords do not match');
       }
-      if (password.length < 6) {
-        return showError('signupError', 'Password must be at least 6 characters');
+      if (password.length < 8) {
+        return showError('signupError', 'Password must be at least 8 characters');
       }
       try {
-        const res = await fetch('https://aria-fashion-stylist.onrender.com/api/signup', {
+        const res = await fetch(API_BASE + '/api/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password })

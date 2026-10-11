@@ -180,6 +180,7 @@
       document.getElementById('themeBtn').textContent = next === 'dark' ? '☀️' : '🌙';
     }
 
+    const API_BASE = window.location.origin;
     const token = localStorage.getItem('aria_token');
     const userId = localStorage.getItem('aria_userId');
 
@@ -207,7 +208,7 @@
 
     window.addEventListener('load', async () => {
       try {
-        const res = await fetch(`https://aria-fashion-stylist.onrender.com/api/profile/${userId}`, {
+        const res = await fetch(API_BASE + `/api/profile/${userId}`, {
           headers: { 'Authorization': token }
         });
         existingProfileData = await res.json();
@@ -304,7 +305,7 @@
             formData.append('photo', selectedPhotoFile);
 
             const photoRes = await Promise.race([
-              fetch('https://aria-fashion-stylist.onrender.com/api/analyze-profile-photo', {
+              fetch(API_BASE + '/api/analyze-profile-photo', {
                 method: 'POST',
                 headers: { 'Authorization': token },
                 body: formData
@@ -323,7 +324,7 @@
 
         submitBtn.textContent = 'Saving...';
 
-        const res = await fetch('https://aria-fashion-stylist.onrender.com/api/profile', {
+        const res = await fetch(API_BASE + '/api/profile', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
