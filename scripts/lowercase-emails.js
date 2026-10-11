@@ -3,9 +3,14 @@ const mongoose = require('mongoose');
 (async () => {
   await mongoose.connect(process.env.MONGODB_URI);
   const users = mongoose.connection.collection('users');
+  let changed = 0;
   for await (const u of users.find({})) {
     const lower = u.email.toLowerCase();
-    if (lower !== u.email) await users.updateOne({ _id: u._id }, { $set: { email: lower } });
+    if (lower !== u.email) {
+      await users.updateOne({ _id: u._id }, { $set: { email: lower } });
+      changed++;
+    }
   }
+  console.log('Emails lowercased:', changed);
   process.exit(0);
 })();
