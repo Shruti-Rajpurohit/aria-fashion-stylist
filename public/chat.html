@@ -8,13 +8,23 @@
 </head>
 <body>
   <div class="chat-container">
-    <div class="chat-sidebar" id="chatSidebar">
+    <aside class="chat-sidebar" id="chatSidebar">
+      <div class="sidebar-top-row">
+        <button class="new-chat-btn" id="newChatBtn" type="button">+ New chat</button>
+        <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" type="button" aria-label="Collapse sidebar">⟨</button>
+      </div>
+
       <div class="sidebar-avatar" id="sidebarAvatar">✨</div>
       <div class="sidebar-name" id="sidebarName">Aria</div>
       <div class="sidebar-tagline" id="sidebarTagline">Your personal stylist</div>
 
       <div class="sidebar-divider"></div>
 
+      <div class="chat-list" id="chatList"></div>
+
+      <div class="sidebar-spacer"></div>
+
+      <div class="sidebar-divider"></div>
       <div class="sidebar-menu-item" onclick="toggleTheme()">
         <span id="sidebarThemeIcon">🌙</span>
         <span id="sidebarThemeLabel">Dark Mode</span>
@@ -22,29 +32,20 @@
       <div class="sidebar-menu-item" onclick="window.location.href='profile.html'">
         👤 Update Profile
       </div>
-      <div class="sidebar-menu-item" onclick="clearHistory()">
-        🗑️ Clear Chat
-      </div>
-
-      <div class="sidebar-spacer"></div>
-
-      <div class="sidebar-divider"></div>
       <div class="sidebar-menu-item danger" onclick="handleLogout()">
         🚪 Logout
       </div>
-    </div>
+    </aside>
+
     <div class="chat-header">
       <div class="chat-header-avatar" id="headerAvatar">✨</div>
-   
       <div class="chat-header-info">
         <h2>Aria</h2>
         <p id="subtitleText">Your personal stylist</p>
       </div>
-
       <button class="menu-btn" onclick="toggleMenu()" id="menuBtn">☰</button>
     </div>
 
-<!-- Slide down menu -->
     <div class="chat-menu" id="chatMenu">
       <div class="chat-menu-item" onclick="toggleTheme()">
         <span id="themeLabel">🌙 Dark Mode</span>
@@ -52,12 +53,20 @@
       <div class="chat-menu-item" onclick="window.location.href='profile.html'">
         👤 Update Profile
       </div>
-      <div class="chat-menu-item" onclick="clearHistoryFromMenu()">
-        🗑️ Clear Chat
+      <div class="chat-menu-item" onclick="createNewChat()">
+        ➕ New chat
       </div>
       <div class="chat-menu-item danger" onclick="handleLogout()">
         🚪 Logout
       </div>
+    </div>
+
+    <div class="chat-drawer" id="chatDrawer">
+      <div class="chat-drawer-header">
+        <h3>Chats</h3>
+        <button type="button" class="drawer-close" onclick="toggleChatDrawer(false)">✕</button>
+      </div>
+      <div class="chat-list" id="drawerChatList"></div>
     </div>
 
     <div class="messages" id="messages">
@@ -65,6 +74,11 @@
         <div class="welcome-emoji">✨</div>
         <p>Give me a second while I get your profile ready...</p>
       </div>
+    </div>
+
+    <div class="chat-banner" id="chatBanner" hidden>
+      <span class="chat-banner-text">This chat is getting long. Start a new chat for the best advice.</span>
+      <button class="chat-banner-action" id="chatBannerAction" type="button">New chat</button>
     </div>
 
     <div class="suggestion-chips" id="suggestionChips">
@@ -83,11 +97,7 @@
     <div class="chat-input-area">
       <button class="image-upload-btn" onclick="document.getElementById('chatImageInput').click()">📎</button>
       <input type="file" id="chatImageInput" accept="image/*" style="display:none" onchange="handleChatImageSelect(event)" />
-      <textarea 
-        id="userInput" 
-        placeholder="Tell Aria what you need..." 
-        rows="1"
-      ></textarea>
+      <textarea id="userInput" placeholder="Tell Aria what you need..." rows="1"></textarea>
       <button class="send-btn" id="sendBtn">➤</button>
     </div>
   </div>

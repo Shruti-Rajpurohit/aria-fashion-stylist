@@ -10,7 +10,186 @@ const mongoose = require('mongoose');
 
 dotenv.config();
 
-mongoose.connect(process.env.MONGODB_URI)
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/fashion-ai';
+const JWT_SECRET = process.env.JWT_SECRET || 'local-dev-secret-change-me';
+
+const memoryCollections = {};
+
+function cloneValue(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function queryMatches(doc, query = {}) {
+  if (!query || typeof query !== 'object' || !Object.keys(query).length) return true;
+
+  return Object.entries(query).every(([key, value]) => {
+    const actual = doc[key];
+
+    if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date) && !('$gt' in value || '$lt' in value || '$gte' in value || '$lte' in value || '$ne' in value || '$in' in value || '$nin' in value || '$exists' in value)) {
+      return actual === value;
+    }
+
+    if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+      if ('$gt' in value) return actual > value.$gt;
+      if ('$lt' in value) return actual < value.$lt;
+      if ('$gte' in value) return actual >= value.$gte;
+      if ('$lte' in value) return actual <= value.$lte;
+      if ('$ne' in value) return actual !== value.$ne;
+      if ('$in' in value) return Array.isArray(value.$in) ? value.$in.includes(actual) : false;
+      if ('$nin' in value) return Array.isArray(value.$nin) ? !value.$nin.includes(actual) : true;
+      if ('$exists' in value) return (actual !== undefined) === value.$exists;
+    }
+
+    return actual === value;
+  });
+}
+
+function withSave(doc, collection, identityKey) {
+  if (!doc || typeof doc !== 'object') return doc;
+  const saved = cloneValue(doc);
+
+  saved.save = async function save() {
+    const idx = collection.findIndex(item => item && item[identityKey] && this[identityKey] && item[identityKey] === this[identityKey]);
+    const next = cloneValue(this);
+    next.updatedAt = new Date();
+    if (idx === -1) {
+      collection.push(next);
+    } else {
+      collection[idx] = next;
+    }
+    return cloneValue(next);
+  };
+
+  return saved;
+}
+
+function createMemoryModel(name, identityKey = 'id') {
+  if (!memoryCollections[name]) memoryCollections[name] = [];
+  const collection = memoryCollections[name];
+
+  const findMany = (query = []) => {
+    const q = query && typeof query === 'object' && !Array.isArray(query) ? query : {};
+    return collection.filter(doc => queryMatches(doc, q));
+  };
+
+  const queryWrapper = (docs = []) => {
+    const table = docs.map(doc => withSave(doc, collection, identityKey));
+    return {
+      _docs: table,
+      sort(fields = {}) {
+        const entries = Object.entries(fields || {});
+        this._docs = [...this._docs].sort((a, b) => {
+          for (const [field, direction] of entries) {
+            const left = a[field] ?? '';
+            const right = b[field] ?? '';
+            const factor = direction === -1 ? -1 : 1;
+            if (left < right) return -1 * factor;
+            if (left > right) return 1 * factor;
+          }
+          return 0;
+        });
+        return this;
+      },
+      select(fields = '') {
+        const keys = typeof fields === 'string' ? fields.split(/\s+/).filter(Boolean) : Object.keys(fields || {});
+        this._docs = this._docs.map(doc => {
+          const picked = {};
+          for (const key of keys) {
+            if (doc && Object.prototype.hasOwnProperty.call(doc, key)) picked[key] = doc[key];
+          }
+          return picked;
+        });
+        return this;
+      },
+      exec() {
+        return Promise.resolve(this._docs);
+      },
+      then(resolve, reject) {
+        return this.exec().then(resolve, reject);
+      }
+    };
+  };
+
+  return {
+    find(query = {}) {
+      return queryWrapper(findMany(query));
+    },
+    async findOne(query = {}) {
+      const match = collection.find(doc => queryMatches(doc, query));
+      return match ? withSave(cloneValue(match), collection, identityKey) : null;
+    },
+    async create(doc = {}) {
+      const next = { ...cloneValue(doc), createdAt: doc.createdAt || new Date(), updatedAt: doc.updatedAt || new Date() };
+      collection.push(next);
+      return withSave(cloneValue(next), collection, identityKey);
+    },
+    async findOneAndUpdate(filter = {}, update = {}, options = {}) {
+      const incoming = update && update.$set ? update.$set : update;
+      const existing = collection.find(doc => queryMatches(doc, filter));
+
+      if (!existing) {
+        if (!options.upsert) return null;
+        const created = { ...cloneValue(filter), ...cloneValue(incoming), createdAt: new Date(), updatedAt: new Date() };
+        collection.push(created);
+        return withSave(cloneValue(created), collection, identityKey);
+      }
+
+      const next = { ...cloneValue(existing), ...cloneValue(incoming), updatedAt: new Date() };
+      const idx = collection.indexOf(existing);
+      collection[idx] = next;
+      return withSave(cloneValue(next), collection, identityKey);
+    },
+    async findOneAndDelete(filter = {}) {
+      const idx = collection.findIndex(doc => queryMatches(doc, filter));
+      if (idx === -1) return null;
+      const [removed] = collection.splice(idx, 1);
+      return withSave(cloneValue(removed), collection, identityKey);
+    }
+  };
+}
+
+function createCompatModel(name, identityKey, schema) {
+  const fallback = createMemoryModel(name, identityKey);
+  return {
+    find(query = {}) {
+      if (mongoose.connection.readyState === 1) {
+        const Model = mongoose.models[name] || mongoose.model(name, schema);
+        return Model.find(query);
+      }
+      return fallback.find(query);
+    },
+    findOne(query = {}) {
+      if (mongoose.connection.readyState === 1) {
+        const Model = mongoose.models[name] || mongoose.model(name, schema);
+        return Model.findOne(query);
+      }
+      return fallback.findOne(query);
+    },
+    create(doc = {}) {
+      if (mongoose.connection.readyState === 1) {
+        const Model = mongoose.models[name] || mongoose.model(name, schema);
+        return Model.create(doc);
+      }
+      return fallback.create(doc);
+    },
+    findOneAndUpdate(filter = {}, update = {}, options = {}) {
+      if (mongoose.connection.readyState === 1) {
+        const Model = mongoose.models[name] || mongoose.model(name, schema);
+        return Model.findOneAndUpdate(filter, update, options);
+      }
+      return fallback.findOneAndUpdate(filter, update, options);
+    },
+    findOneAndDelete(filter = {}) {
+      if (mongoose.connection.readyState === 1) {
+        const Model = mongoose.models[name] || mongoose.model(name, schema);
+        return Model.findOneAndDelete(filter);
+      }
+      return fallback.findOneAndDelete(filter);
+    }
+  };
+}
+
+mongoose.connect(MONGODB_URI)
   .then(() => console.log('Connected to MongoDB'))
   .catch(err => console.error('MongoDB connection error:', err));
 
@@ -31,6 +210,31 @@ function normalizeEmail(value) {
 function truncate(text, maxChars = 500) {
   if (!text) return text;
   return text.length > maxChars ? text.slice(0, maxChars) + '...' : text;
+}
+
+function approxTokens(text) {
+  return Math.ceil((String(text || '').length || 0) / 4);
+}
+
+function buildMessages(systemPrompt, stored, userContent, budget = 3500) {
+  const clip = (t, n = 600) => (t && t.length > n ? t.slice(0, n) + '...' : t);
+  const hist = (stored || [])
+    .filter(m => m && m.text && (m.role === 'user' || m.role === 'model'))
+    .map(m => ({
+      role: m.role === 'model' ? 'assistant' : 'user',
+      content: clip(m.text)
+    }));
+
+  let used = approxTokens(systemPrompt) + approxTokens(userContent);
+  const kept = [];
+  for (let i = hist.length - 1; i >= 0; i--) {
+    const c = approxTokens(hist[i].content);
+    if (used + c > budget) break;
+    used += c;
+    kept.unshift(hist[i]);
+  }
+
+  return [{ role: 'system', content: systemPrompt }, ...kept, { role: 'user', content: userContent }];
 }
 
 function friendlyError(err) {
@@ -64,9 +268,24 @@ const historySchema = new mongoose.Schema({
   history: { type: Array, default: [] }
 });
 
-const User = mongoose.model('User', userSchema);
-const Profile = mongoose.model('Profile', profileSchema);
-const History = mongoose.model('History', historySchema);
+const chatSchema = new mongoose.Schema({
+  chatId: { type: String, required: true, unique: true },
+  userId: { type: String, required: true, index: true },
+  title: { type: String, default: 'New chat' },
+  messages: [{
+    role: { type: String, enum: ['user', 'model'], required: true },
+    text: { type: String, required: true },
+    imageIds: [{ type: String }],
+    ts: { type: Date, default: Date.now }
+  }],
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+}, { timestamps: true });
+
+const User = createCompatModel('User', 'userId', userSchema);
+const Profile = createCompatModel('Profile', 'userId', profileSchema);
+const History = createCompatModel('History', 'userId', historySchema);
+const Chat = createCompatModel('Chat', 'chatId', chatSchema);
 
 const app = express();
 
@@ -74,8 +293,7 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
 
-const JWT_SECRET = process.env.JWT_SECRET;
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY || 'demo-key';
 const GROQ_VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
 const API_BASE = (process.env.APP_BASE_URL || '').replace(/\/$/, '') || 'http://localhost:3000';
 
@@ -425,12 +643,98 @@ Be specific and detailed. This will help a stylist suggest similar or complement
   }
 });
 
+app.get('/api/chats', verifyToken, async (req, res) => {
+  try {
+    let chats = await Chat.find({ userId: req.userId }).sort({ updatedAt: -1 }).select('chatId title updatedAt createdAt');
+    if (!chats.length) {
+      const legacy = await History.findOne({ userId: req.userId });
+      if (legacy && Array.isArray(legacy.history) && legacy.history.length) {
+        const migrated = await Chat.create({
+          chatId: `chat_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`,
+          userId: req.userId,
+          title: 'Earlier conversation',
+          messages: legacy.history.map(msg => ({
+            role: msg.role === 'model' ? 'model' : 'user',
+            text: String(msg.text || ''),
+            ts: new Date()
+          }))
+        });
+        chats = [migrated];
+      }
+    }
+    res.json({ chats });
+  } catch (err) {
+    console.error('List chats error:', err.message);
+    const friendly = friendlyError(err);
+    res.status(friendly.status).json({ error: friendly.error });
+  }
+});
+
+app.post('/api/chats', verifyToken, async (req, res) => {
+  try {
+    const chatId = `chat_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
+    const chat = await Chat.create({
+      chatId,
+      userId: req.userId,
+      title: 'New chat',
+      messages: []
+    });
+    res.status(201).json({ chat });
+  } catch (err) {
+    console.error('Create chat error:', err.message);
+    const friendly = friendlyError(err);
+    res.status(friendly.status).json({ error: friendly.error });
+  }
+});
+
+app.get('/api/chats/:chatId', verifyToken, async (req, res) => {
+  try {
+    const chat = await Chat.findOne({ chatId: req.params.chatId, userId: req.userId });
+    if (!chat) return res.status(404).json({ error: 'Chat not found' });
+    res.json({ chat });
+  } catch (err) {
+    console.error('Get chat error:', err.message);
+    const friendly = friendlyError(err);
+    res.status(friendly.status).json({ error: friendly.error });
+  }
+});
+
+app.delete('/api/chats/:chatId', verifyToken, async (req, res) => {
+  try {
+    const deleted = await Chat.findOneAndDelete({ chatId: req.params.chatId, userId: req.userId });
+    if (!deleted) return res.status(404).json({ error: 'Chat not found' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete chat error:', err.message);
+    const friendly = friendlyError(err);
+    res.status(friendly.status).json({ error: friendly.error });
+  }
+});
+
 app.post('/api/chat', verifyToken, async (req, res) => {
-  const { message, history, imageAnalysis } = req.body;
+  const { chatId, message, imageAnalysis } = req.body;
 
   try {
     const profile = await Profile.findOne({ userId: req.userId });
     if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+    const NUDGE_AT = 5;
+    const MAX_REPLIES = 8;
+
+    let chat = await Chat.findOne({ chatId, userId: req.userId });
+    if (!chat) {
+      chat = await Chat.create({
+        chatId: chatId || `chat_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`,
+        userId: req.userId,
+        title: 'New chat',
+        messages: []
+      });
+    }
+
+    const replies = (chat.messages || []).filter(m => m.role === 'model').length;
+    if (replies >= MAX_REPLIES) {
+      return res.status(409).json({ error: 'CHAT_FULL' });
+    }
 
     const systemPrompt = `You are Aria, a personal stylist with taste and a point of view. You talk like a sharp, warm friend who knows fashion inside out.
 
@@ -460,26 +764,27 @@ Rules
 - No tables, no headers. Only **bold** and simple "- " lists.
 - Respect the budget and the avoid-colors list.`;
 
-    const validHistory = (history || [])
-      .filter(h => h.text && h.text.trim() !== '' && (h.role === 'user' || h.role === 'model'))
-      .slice(-8);
+    const stored = (chat.messages || []).map(m => ({ role: m.role, text: m.text }));
+    const userContent = imageAnalysis
+      ? `[Image analysis] ${truncate(imageAnalysis, 500)}\n\n${message || 'I shared a reference image above.'}`
+      : (message || 'I shared a reference image above.');
 
-    const messages = [
-      { role: 'system', content: systemPrompt },
-      ...validHistory.map(h => ({
-        role: h.role === 'model' ? 'assistant' : 'user',
-        content: truncate(h.text)
-      })),
-      {
-        role: 'user',
-        content: imageAnalysis
-          ? `[Image analysis] ${truncate(imageAnalysis, 500)}\n\n${message || ''}`
-          : message
-      }
-    ];
-
+    const messages = buildMessages(systemPrompt, stored, userContent, 3500);
     const response = await chatWithGroq(messages);
-    res.json({ response });
+
+    const nextReplies = replies + 1;
+    const userMsg = { role: 'user', text: userContent, ts: new Date() };
+    const modelMsg = { role: 'model', text: response, ts: new Date() };
+
+    chat.messages.push(userMsg, modelMsg);
+    if (!chat.title || chat.title === 'New chat') {
+      const firstText = userContent.replace(/\s+/g, ' ').trim();
+      chat.title = firstText ? firstText.slice(0, 40) : 'New chat';
+    }
+    chat.updatedAt = new Date();
+    await chat.save();
+
+    res.json({ response, nudge: nextReplies >= NUDGE_AT, full: nextReplies >= MAX_REPLIES });
   } catch (error) {
     console.error('Chat error:', error.message);
     const friendly = friendlyError(error);
