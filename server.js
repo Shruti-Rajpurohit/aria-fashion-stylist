@@ -123,7 +123,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
+const GROQ_VISION_MODEL = 'qwen/qwen3.8-27b';
 const API_BASE = (process.env.APP_BASE_URL || '').replace(/\/$/, '') || 'http://localhost:3000';
 
 async function sendMail({ to, subject, html }) {
