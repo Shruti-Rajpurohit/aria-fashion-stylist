@@ -56,6 +56,16 @@ function formatMessage(text) {
     .replace(/\*(.*?)\*/g, '<em>$1</em>');
 }
 
+function addMessage(text, sender) {
+  const messages = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.classList.add('message', sender);
+  div.innerHTML = formatMessage(text);
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+  return div;
+}
+
 function renderChatList() {
   const containers = [document.getElementById('chatList'), document.getElementById('drawerChatList')];
   containers.forEach(container => {
@@ -175,8 +185,9 @@ async function loadChat(chatId) {
   }
 
   chatHistory = (data.chat.messages || []).map(msg => ({ role: msg.role, text: msg.text }));
-  currentChatFull = false;
-  currentChatNudge = false;
+  const replyCount = chatHistory.filter(m => m.role === 'model').length;
+  currentChatFull = replyCount >= 8;
+  currentChatNudge = replyCount >= 5;
   renderChatList();
   renderChatMessages();
   setInputState();
