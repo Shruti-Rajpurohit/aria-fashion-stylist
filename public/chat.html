@@ -88,15 +88,12 @@
       <span class="chip" onclick="useChip(this)">Weekend brunch ☕</span>
     </div>
 
-    <div id="imagePreviewChip" class="image-preview-chip" style="display:none">
-      <img id="chipPreviewImg" />
-      <span id="chipFileName">image.jpg</span>
-      <button class="remove-image-btn" onclick="removeSelectedImage()">✕</button>
-    </div>
+    <div id="selectedChatImages" class="selected-chat-images" hidden></div>
+    <div id="imageUploadNotice" class="image-upload-notice" role="status" aria-live="polite" hidden></div>
 
     <div class="chat-input-area">
       <button class="image-upload-btn" onclick="document.getElementById('chatImageInput').click()">📎</button>
-      <input type="file" id="chatImageInput" accept="image/*" style="display:none" onchange="handleChatImageSelect(event)" />
+      <input type="file" id="chatImageInput" accept="image/*" multiple style="display:none" onchange="handleChatImageSelect(event)" />
       <textarea id="userInput" placeholder="Tell Aria what you need..." rows="1"></textarea>
       <button class="send-btn" id="sendBtn">➤</button>
     </div>

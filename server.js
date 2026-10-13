@@ -8,6 +8,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
+const MAX_CHAT_IMAGES = 3;
+
 dotenv.config();
 
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -123,7 +125,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_VISION_MODEL = 'qwen/qwen3.8-27b';
+const GROQ_VISION_MODEL = process.env.GROQ_VISION_MODEL || 'qwen/qwen3.8-27b';
 const API_BASE = (process.env.APP_BASE_URL || '').replace(/\/$/, '') || 'http://localhost:3000';
 
 async function sendMail({ to, subject, html }) {
@@ -156,17 +158,39 @@ const upload = multer({
   }
 });
 
-async function analyzeImageWithVision(imageBuffer, mimeType, prompt) {
+async function prepareVisionImage(file) {
   try {
-    const image = await Jimp.read(imageBuffer);
-    image.resize({ w: 800 });
-    imageBuffer = await image.getBuffer('image/jpeg', { quality: 75 });
-    mimeType = 'image/jpeg';
+    const image = await Jimp.read(file.buffer);
+    const scale = Math.min(1, 800 / Math.max(image.bitmap.width, image.bitmap.height));
+    if (scale < 1) {
+      image.resize({
+        w: Math.round(image.bitmap.width * scale),
+        h: Math.round(image.bitmap.height * scale)
+      });
+    }
+    return {
+      buffer: await image.getBuffer('image/jpeg', { quality: 75 }),
+      mimeType: 'image/jpeg'
+    };
   } catch (err) {
     console.log('Compression skipped:', err.message);
+    return { buffer: file.buffer, mimeType: file.mimetype };
   }
+}
 
-  const base64Image = imageBuffer.toString('base64');
+async function analyzeImagesWithVision(files, prompt) {
+  const images = await Promise.all(files.map(prepareVisionImage));
+  const content = [{ type: 'text', text: prompt }];
+  images.forEach((image, index) => {
+    content.push(
+      { type: 'text', text: `Image ${index + 1}` },
+      {
+        type: 'image_url',
+        image_url: { url: `data:${image.mimeType};base64,${image.buffer.toString('base64')}` }
+      }
+    );
+  });
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30000);
 
@@ -179,30 +203,61 @@ async function analyzeImageWithVision(imageBuffer, mimeType, prompt) {
       },
       body: JSON.stringify({
         model: GROQ_VISION_MODEL,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            {
-              type: 'image_url',
-              image_url: { url: `data:${mimeType};base64,${base64Image}` }
-            }
-          ]
-        }],
-        max_tokens: 400,
+        messages: [{ role: 'user', content }],
+        max_tokens: 800,
+        reasoning_effort: 'none',
         temperature: 0.2
       }),
       signal: controller.signal
     });
 
+    let data;
+    try {
+      data = await response.json();
+    } catch (error) {
+      if (response.ok) throw error;
+      data = {};
+    }
+    if (!response.ok || data.error) {
+      const error = new Error(data.error?.message || `Vision request failed with status ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+    const analysis = data.choices?.[0]?.message?.content;
+    if (typeof analysis !== 'string' || !analysis.trim()) {
+      throw new Error('Vision response was empty');
+    }
+    return analysis;
+  } finally {
     clearTimeout(timeoutId);
-    const data = await response.json();
-    if (data.error) throw new Error(data.error.message);
-    return data.choices[0].message.content;
-  } catch (err) {
-    clearTimeout(timeoutId);
-    throw err;
   }
+}
+
+const chatImagePrompt = `For each image, describe in under 70 words what it shows: a garment, footwear, hairstyle, accessory, or person. Include visible colors, fit, pattern, and overall vibe. If one image shows a person and another shows a garment, say so plainly. Reply as plain text with one "Image 1:", "Image 2:", etc. label per image.`;
+
+function imageAnalysisError(res, error) {
+  console.error('Vision error:', error.message);
+  const requestTooLarge = error.status === 413 || /request too large/i.test(error.message);
+  if (requestTooLarge || error.status === 429 || /rate.?limit|tokens per minute|429/i.test(error.message)) {
+    return res.status(requestTooLarge ? 413 : 429).json({
+      error: 'IMAGE_READ_FAILED',
+      message: 'That is a lot of photos at once. Try fewer.'
+    });
+  }
+  return res.status(502).json({ error: 'IMAGE_READ_FAILED' });
+}
+
+function receiveChatImages(req, res, next) {
+  upload.array('images', MAX_CHAT_IMAGES)(req, res, error => {
+    if (!error) return next();
+    if (error instanceof multer.MulterError) {
+      const message = error.code === 'LIMIT_UNEXPECTED_FILE'
+        ? `Choose no more than ${MAX_CHAT_IMAGES} images.`
+        : 'Each image must be 10 MB or less.';
+      return res.status(400).json({ error: 'IMAGE_UPLOAD_FAILED', message });
+    }
+    return next(error);
+  });
 }
 
 async function chatWithGroq(messages) {
@@ -443,32 +498,30 @@ app.post('/api/analyze-profile-photo', verifyToken, upload.single('photo'), asyn
 5. Any other features relevant to fashion and styling
 
 Be concise and factual. This description will be used to give personalized fashion advice.`;
-    const analysis = await analyzeImageWithVision(req.file.buffer, req.file.mimetype, prompt);
+    const analysis = await analyzeImagesWithVision([req.file], prompt);
     res.json({ success: true, analysis });
   } catch (error) {
-    console.error('Vision error:', error.message);
-    const friendly = friendlyError(error);
-    return res.status(502).json({ error: 'IMAGE_READ_FAILED' });
+    return imageAnalysisError(res, error);
+  }
+});
+
+app.post('/api/analyze-chat-images', verifyToken, receiveChatImages, async (req, res) => {
+  if (!req.files?.length) return res.status(400).json({ error: 'No images uploaded' });
+  try {
+    const analysis = await analyzeImagesWithVision(req.files, chatImagePrompt);
+    res.json({ success: true, analysis });
+  } catch (error) {
+    return imageAnalysisError(res, error);
   }
 });
 
 app.post('/api/analyze-chat-image', verifyToken, upload.single('image'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
   try {
-    const prompt = `You are a fashion stylist assistant. Analyze this image and describe in detail:
-1. If it shows clothing/outfit: describe the garments, style, fit, colors, patterns
-2. If it shows footwear: describe the type, style, color, heel height if applicable
-3. If it shows a hairstyle: describe the cut, length, texture, color, styling
-4. If it shows accessories: describe each item
-5. Overall aesthetic/vibe (e.g. casual, formal, bohemian, streetwear, elegant)
-6. Season/occasion it seems appropriate for
-
-Be specific and detailed. This will help a stylist suggest similar or complementary items.`;
-    const analysis = await analyzeImageWithVision(req.file.buffer, req.file.mimetype, prompt);
+    const analysis = await analyzeImagesWithVision([req.file], chatImagePrompt);
     res.json({ success: true, analysis });
   } catch (error) {
-    console.error('Vision error:', error.message);
-    return res.status(502).json({ error: 'IMAGE_READ_FAILED' });
+    return imageAnalysisError(res, error);
   }
 });
 
@@ -595,11 +648,11 @@ Rules
 
     const stored = (chat.messages || []).map(m => ({
       role: m.role,
-      text: m.analysis ? `[Image analysis] ${truncate(m.analysis, 300)}\n\n${m.text}` : m.text
+      text: m.analysis ? `[Image analysis] ${truncate(m.analysis, 600)}\n\n${m.text}` : m.text
     }));
     const cleanMessage = message || 'I shared a reference image above.';
     const userContent = imageAnalysis
-      ? `[Image analysis] ${truncate(imageAnalysis, 500)}\n\n${cleanMessage}`
+      ? `[Image analysis] ${truncate(imageAnalysis, 1500)}\n\n${cleanMessage}`
       : cleanMessage;
 
     const messages = buildMessages(systemPrompt, stored, userContent, 3500);
@@ -609,7 +662,7 @@ Rules
     const userMsg = {
       role: 'user',
       text: cleanMessage,
-      analysis: imageAnalysis ? truncate(imageAnalysis, 500) : undefined,
+      analysis: imageAnalysis ? truncate(imageAnalysis, 600) : undefined,
       ts: new Date()
     };
     const modelMsg = { role: 'model', text: response, ts: new Date() };

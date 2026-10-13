@@ -1,4 +1,6 @@
 const API_BASE = window.location.origin;
+const MAX_CHAT_IMAGES = 3;
+const MAX_CHAT_IMAGE_SIZE = 10 * 1024 * 1024;
 const token = localStorage.getItem('aria_token');
 const userId = localStorage.getItem('aria_userId');
 const userName = localStorage.getItem('aria_name');
@@ -8,8 +10,8 @@ if (!token || !userId) {
 }
 
 let chatHistory = [];
-let selectedChatImage = null;
-let selectedChatImageName = '';
+let selectedChatImages = [];
+const activeMessageImageUrls = new Set();
 let activeChatId = null;
 let chatList = [];
 let currentChatFull = false;
@@ -130,6 +132,8 @@ function renderChatMessages() {
   const messages = document.getElementById('messages');
   if (!messages) return;
 
+  activeMessageImageUrls.forEach(url => URL.revokeObjectURL(url));
+  activeMessageImageUrls.clear();
   messages.innerHTML = '';
 
   if (!chatHistory.length) {
@@ -265,27 +269,113 @@ function toggleChatDrawer(forceOpen) {
   drawer.classList.toggle('open', next);
 }
 
-function handleChatImageSelect(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  selectedChatImage = file;
-  selectedChatImageName = file.name;
-
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    document.getElementById('chipPreviewImg').src = e.target.result;
-    document.getElementById('chipFileName').textContent = file.name;
-    document.getElementById('imagePreviewChip').style.display = 'flex';
-  };
-  reader.readAsDataURL(file);
+function showImageUploadNotice(message = '') {
+  const notice = document.getElementById('imageUploadNotice');
+  if (!notice) return;
+  notice.textContent = message;
+  notice.hidden = !message;
 }
 
-function removeSelectedImage() {
-  selectedChatImage = null;
-  selectedChatImageName = '';
-  document.getElementById('imagePreviewChip').style.display = 'none';
+function renderSelectedChatImages() {
+  const container = document.getElementById('selectedChatImages');
+  if (!container) return;
+  container.replaceChildren();
+  container.hidden = selectedChatImages.length === 0;
+
+  selectedChatImages.forEach((image, index) => {
+    const chip = document.createElement('div');
+    chip.className = 'image-preview-chip';
+
+    const thumbnail = document.createElement('img');
+    thumbnail.src = image.previewUrl;
+    thumbnail.alt = '';
+    chip.appendChild(thumbnail);
+
+    const name = document.createElement('span');
+    name.className = 'image-preview-name';
+    name.textContent = image.file.name;
+    chip.appendChild(name);
+
+    const removeButton = document.createElement('button');
+    removeButton.className = 'remove-image-btn';
+    removeButton.type = 'button';
+    removeButton.textContent = '✕';
+    removeButton.setAttribute('aria-label', `Remove ${image.file.name}`);
+    removeButton.addEventListener('click', () => removeSelectedImage(index));
+    chip.appendChild(removeButton);
+    container.appendChild(chip);
+  });
+}
+
+function handleChatImageSelect(event) {
+  const files = Array.from(event.target.files || []);
+  let notice = '';
+
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) {
+      notice ||= 'Choose image files only.';
+      continue;
+    }
+    if (file.size > MAX_CHAT_IMAGE_SIZE) {
+      notice ||= 'Each image must be 10 MB or less.';
+      continue;
+    }
+    if (selectedChatImages.length >= MAX_CHAT_IMAGES) {
+      notice = `Only ${MAX_CHAT_IMAGES} images can be added per message.`;
+      break;
+    }
+    selectedChatImages.push({ file, previewUrl: URL.createObjectURL(file) });
+  }
+
+  event.target.value = '';
+  showImageUploadNotice(notice);
+  renderSelectedChatImages();
+}
+
+function removeSelectedImage(index) {
+  const [removed] = selectedChatImages.splice(index, 1);
+  if (removed) URL.revokeObjectURL(removed.previewUrl);
+  renderSelectedChatImages();
+}
+
+function clearSelectedChatImages(preservePreviewUrls = false) {
+  if (preservePreviewUrls) {
+    selectedChatImages.forEach(image => activeMessageImageUrls.add(image.previewUrl));
+  } else {
+    selectedChatImages.forEach(image => URL.revokeObjectURL(image.previewUrl));
+  }
+  selectedChatImages = [];
   document.getElementById('chatImageInput').value = '';
+  showImageUploadNotice();
+  renderSelectedChatImages();
+}
+
+function resizeChatImage(file, previewUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const scale = Math.min(1, 1024 / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      const context = canvas.getContext('2d');
+      if (!context) {
+        reject(new Error('Could not prepare the selected image.'));
+        return;
+      }
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(blob => {
+        if (!blob) {
+          reject(new Error('Could not prepare the selected image.'));
+          return;
+        }
+        const baseName = file.name.replace(/\.[^.]+$/, '') || 'image';
+        resolve(new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' }));
+      }, 'image/jpeg', 0.8);
+    };
+    image.onerror = () => reject(new Error('Could not read the selected image.'));
+    image.src = previewUrl;
+  });
 }
 
 async function sendMessage() {
@@ -293,8 +383,8 @@ async function sendMessage() {
   const sendBtn = document.getElementById('sendBtn');
   const messagesEl = document.getElementById('messages');
   const message = input.value.trim();
-  const imageFile = selectedChatImage;
-  if (!message && !imageFile) return;
+  const imageItems = [...selectedChatImages];
+  if (!message && !imageItems.length) return;
   if (!activeChatId) {
     await createNewChat();
     if (!activeChatId) return;
@@ -306,11 +396,16 @@ async function sendMessage() {
 
   const bubble = document.createElement('div');
   bubble.classList.add('message', 'user');
-  if (imageFile) {
-    const img = document.createElement('img');
-    img.src = URL.createObjectURL(imageFile);
-    img.style.cssText = 'max-width:100%; border-radius:10px; display:block; margin-bottom:6px;';
-    bubble.appendChild(img);
+  if (imageItems.length) {
+    const imageGrid = document.createElement('div');
+    imageGrid.className = 'message-images';
+    imageItems.forEach((image, index) => {
+      const img = document.createElement('img');
+      img.src = image.previewUrl;
+      img.alt = `Shared image ${index + 1}: ${image.file.name}`;
+      imageGrid.appendChild(img);
+    });
+    bubble.appendChild(imageGrid);
   }
   if (message) {
     const textDiv = document.createElement('div');
@@ -329,33 +424,37 @@ async function sendMessage() {
   try {
     let imageAnalysis = null;
 
-    if (imageFile) {
-      let imgData = null;
+    if (imageItems.length) {
       try {
         const fd = new FormData();
-        fd.append('image', imageFile);
-        const imgRes = await fetch(API_BASE + '/api/analyze-chat-image', {
+        for (const image of imageItems) {
+          const resizedImage = await resizeChatImage(image.file, image.previewUrl);
+          fd.append('images', resizedImage, resizedImage.name);
+        }
+        const imgRes = await fetch(API_BASE + '/api/analyze-chat-images', {
           method: 'POST',
           headers: { 'Authorization': token },
           body: fd
         });
-        const parsed = await imgRes.json();
-        if (imgRes.ok && parsed.success) imgData = parsed;
+        const parsed = await imgRes.json().catch(() => ({}));
+        if (!imgRes.ok || !parsed.success) {
+          const error = new Error(parsed.message || "I couldn't read that image, please try again");
+          error.userMessage = parsed.message;
+          throw error;
+        }
+        imageAnalysis = parsed.analysis;
       } catch (err) {
         console.error('Image analysis failed:', err);
-      }
-      if (!imgData) {
         bubble.remove();
         typingDiv.remove();
-        addMessage("I couldn't read that image, please try again", 'aria');
+        addMessage(err.userMessage || "I couldn't read that image, please try again", 'aria');
         return;
       }
-      imageAnalysis = imgData.analysis;
     }
 
     input.value = '';
     input.style.height = 'auto';
-    if (imageFile) removeSelectedImage();
+    if (imageItems.length) clearSelectedChatImages(true);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);
