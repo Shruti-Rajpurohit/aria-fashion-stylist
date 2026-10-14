@@ -47,13 +47,16 @@
     </div>
 
     <div class="chat-menu" id="chatMenu">
+      <div class="chat-menu-item" onclick="toggleMenu(); toggleChatDrawer(true)">
+        💬 Chats
+      </div>
       <div class="chat-menu-item" onclick="toggleTheme()">
         <span id="themeLabel">🌙 Dark Mode</span>
       </div>
       <div class="chat-menu-item" onclick="window.location.href='profile.html'">
         👤 Update Profile
       </div>
-      <div class="chat-menu-item" onclick="createNewChat()">
+      <div class="chat-menu-item" onclick="toggleMenu(); createNewChat()">
         ➕ New chat
       </div>
       <div class="chat-menu-item danger" onclick="handleLogout()">
