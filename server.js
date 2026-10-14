@@ -46,24 +46,32 @@ function approxTokens(text) {
   return Math.ceil((String(text || '').length || 0) / 4);
 }
 
-function buildMessages(systemPrompt, stored, userContent, budget = 3500) {
-  const clip = (t, n = 600) => (t && t.length > n ? t.slice(0, n) + '...' : t);
-  const hist = (stored || [])
-    .filter(m => m && m.text && (m.role === 'user' || m.role === 'model'))
-    .map(m => ({
-      role: m.role === 'model' ? 'assistant' : 'user',
-      content: clip(m.text)
-    }));
+const clip = (t, n) => (t && t.length > n ? t.slice(0, n) + '...' : t);
 
+function shapeStored(m) {
+  if (m.role === 'model') return { role: 'assistant', content: clip(m.text, 1200) };
+  let c = clip(m.text, 500);
+  if (m.analysis) c += '\n\n[Image analysis] ' + clip(m.analysis, 500);
+  return { role: 'user', content: c };
+}
+
+function buildMessages(systemPrompt, stored, userContent, budget = 4500) {
+  const valid = (stored || []).filter(m => m && m.text && (m.role === 'user' || m.role === 'model'));
+  const hist = valid.map(shapeStored);
   let used = approxTokens(systemPrompt) + approxTokens(userContent);
   const kept = [];
-  for (let i = hist.length - 1; i >= 0; i--) {
+  let i = hist.length - 1;
+  for (; i >= 0; i--) {
     const c = approxTokens(hist[i].content);
     if (used + c > budget) break;
     used += c;
     kept.unshift(hist[i]);
   }
 
+  if (i >= 0) {
+    const firstUser = valid.find(m => m.role === 'user');
+    if (firstUser) kept.unshift({ role: 'user', content: '[Start of this chat] ' + clip(firstUser.text, 400) });
+  }
   return [{ role: 'system', content: systemPrompt }, ...kept, { role: 'user', content: userContent }];
 }
 
@@ -637,25 +645,29 @@ Personality
 
 Conversation
 - Answer first, in 2 to 4 short sentences, unless a full outfit was requested. A quick question gets a quick reply.
-- End with at most one specific follow-up question when it moves things forward (occasion, weather, which of two options). Skip it when the answer is complete.
+- End with at most one specific follow-up question when it moves things forward (weather, which of two options, a missing detail). Never ask about anything already said in this chat. Skip it when the answer is complete.
 - Full outfit: top, bottom, footwear, accessories, hair in a compact list plus one line on why it works. Under 150 words.
 - If asked for a verdict on a piece or photo, lead with the verdict (yes, no, yes with changes), then the reason.
+
+Memory and focus
+- Everything said earlier in this chat is known: the occasion, the pieces under discussion, and any correction. Never ask for it again.
+- The profile occasions are only defaults. If the chat names an occasion, such as an evening Indian wedding function, it overrides them, and every suggestion must fit it, including traditional wear, fabrics and colors.
+- If the client corrects you about an image, their word is final. Redo your judgment with the correction and stay on the same outfit.
+- When comparing images, call them Image 1, Image 2, Image 3 and stay on those pieces unless asked for alternatives.
+- You know Indian and South Asian occasion wear as well as Western fashion.
 
 Rules
 - Only describe an image if an [Image analysis] block is present in the message. If the client mentions a photo and there is no analysis, say you could not see it and ask them to resend. Never invent clothing details.
 - No tables, no headers. Only **bold** and simple "- " lists.
 - Respect the budget and the avoid-colors list.`;
 
-    const stored = (chat.messages || []).map(m => ({
-      role: m.role,
-      text: m.analysis ? `[Image analysis] ${truncate(m.analysis, 600)}\n\n${m.text}` : m.text
-    }));
+    const stored = (chat.messages || []).map(m => ({ role: m.role, text: m.text, analysis: m.analysis }));
     const cleanMessage = message || 'I shared a reference image above.';
     const userContent = imageAnalysis
-      ? `[Image analysis] ${truncate(imageAnalysis, 1500)}\n\n${cleanMessage}`
+      ? `${cleanMessage}\n\n[Image analysis] ${truncate(imageAnalysis, 1500)}`
       : cleanMessage;
 
-    const messages = buildMessages(systemPrompt, stored, userContent, 3500);
+    const messages = buildMessages(systemPrompt, stored, userContent, 4500);
     const response = await chatWithGroq(messages);
 
     const nextReplies = replies + 1;
